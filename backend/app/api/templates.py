@@ -1,0 +1,157 @@
+from pathlib import Path
+
+from fastapi import APIRouter, Depends, HTTPException, UploadFile
+from fastapi.responses import FileResponse
+from sqlmodel import Session, delete, select
+
+from app.database import get_session
+from app.models.template import Template, TemplatePage, now_utc
+from app.models.text_element import TemplateTextElement
+from app.models.variable import TemplateVariable
+from app.schemas.template import TemplateDetailOut, TemplateListOut, TemplateSaveLayoutIn, TemplateUpdateIn
+from app.services.pdf_service import read_pdf_pages
+from app.services.storage_service import StorageService
+from app.utils.text_utils import extract_variables_from_elements
+
+router = APIRouter(prefix="/api/templates", tags=["templates"])
+
+
+def _template_detail(session: Session, template_id: str) -> TemplateDetailOut:
+    template = session.get(Template, template_id)
+    if not template:
+        raise HTTPException(status_code=404, detail="Template not found")
+    pages = session.exec(select(TemplatePage).where(TemplatePage.template_id == template_id).order_by(TemplatePage.page_number)).all()
+    elements = session.exec(select(TemplateTextElement).where(TemplateTextElement.template_id == template_id)).all()
+    variables = session.exec(select(TemplateVariable).where(TemplateVariable.template_id == template_id).order_by(TemplateVariable.name)).all()
+    return TemplateDetailOut.model_validate(
+        {
+            **template.model_dump(),
+            "pages": pages,
+            "text_elements": elements,
+            "variables": variables,
+        }
+    )
+
+
+@router.post("/upload", response_model=TemplateDetailOut)
+async def upload_template(file: UploadFile, session: Session = Depends(get_session)) -> TemplateDetailOut:
+    storage = StorageService()
+    path = await storage.save_upload(file)
+    pages = read_pdf_pages(path)
+    if not pages:
+        raise HTTPException(status_code=400, detail="PDF does not contain any pages")
+
+    template = Template(
+        name=Path(file.filename or "Untitled template").stem,
+        original_pdf_path=str(path),
+        original_filename=file.filename or path.name,
+        page_count=len(pages),
+    )
+    session.add(template)
+    session.commit()
+    session.refresh(template)
+    for page in pages:
+        page.template_id = template.id
+        session.add(page)
+    session.commit()
+    return _template_detail(session, template.id)
+
+
+@router.get("", response_model=list[TemplateListOut])
+def list_templates(session: Session = Depends(get_session)) -> list[Template]:
+    return list(session.exec(select(Template).order_by(Template.updated_at.desc())).all())
+
+
+@router.get("/{template_id}", response_model=TemplateDetailOut)
+def get_template(template_id: str, session: Session = Depends(get_session)) -> TemplateDetailOut:
+    return _template_detail(session, template_id)
+
+
+@router.get("/{template_id}/original.pdf")
+def get_original_pdf(template_id: str, session: Session = Depends(get_session)) -> FileResponse:
+    template = session.get(Template, template_id)
+    if not template:
+        raise HTTPException(status_code=404, detail="Template not found")
+    path = Path(template.original_pdf_path)
+    if not path.exists():
+        raise HTTPException(status_code=404, detail="Original PDF not found")
+    return FileResponse(path, media_type="application/pdf", filename=template.original_filename)
+
+
+@router.put("/{template_id}", response_model=TemplateDetailOut)
+def update_template(template_id: str, payload: TemplateUpdateIn, session: Session = Depends(get_session)) -> TemplateDetailOut:
+    template = session.get(Template, template_id)
+    if not template:
+        raise HTTPException(status_code=404, detail="Template not found")
+    if payload.name is not None:
+        template.name = payload.name
+    if payload.status is not None:
+        template.status = payload.status
+    template.updated_at = now_utc()
+    session.add(template)
+    session.commit()
+    return _template_detail(session, template_id)
+
+
+@router.post("/{template_id}/save-layout", response_model=TemplateDetailOut)
+def save_layout(template_id: str, payload: TemplateSaveLayoutIn, session: Session = Depends(get_session)) -> TemplateDetailOut:
+    template = session.get(Template, template_id)
+    if not template:
+        raise HTTPException(status_code=404, detail="Template not found")
+
+    page_numbers = {page.page_number for page in session.exec(select(TemplatePage).where(TemplatePage.template_id == template_id)).all()}
+    for element in payload.text_elements:
+        if element.page_number not in page_numbers:
+            raise HTTPException(status_code=422, detail=f"Page {element.page_number} does not exist")
+
+    session.exec(delete(TemplateTextElement).where(TemplateTextElement.template_id == template_id))
+    for element in payload.text_elements:
+        values = element.model_dump(exclude={"id"})
+        if element.id:
+            values["id"] = element.id
+        session.add(TemplateTextElement(template_id=template_id, **values))
+
+    detected_names = set(extract_variables_from_elements(payload.text_elements))
+    manual_by_name = {variable.name: variable for variable in payload.variables}
+    existing_by_name = {
+        variable.name: variable
+        for variable in session.exec(select(TemplateVariable).where(TemplateVariable.template_id == template_id)).all()
+    }
+    desired_names = detected_names | set(manual_by_name)
+
+    for name, existing in existing_by_name.items():
+        if name not in desired_names:
+            session.delete(existing)
+
+    for name in sorted(desired_names):
+        incoming = manual_by_name.get(name)
+        existing = existing_by_name.get(name)
+        if existing:
+            if incoming:
+                existing.label = incoming.label or existing.label or name.replace("_", " ").title()
+                existing.type = incoming.type
+                existing.required = incoming.required
+                existing.default_value = incoming.default_value
+                existing.sample_value = incoming.sample_value
+                existing.description = incoming.description
+            existing.updated_at = now_utc()
+            session.add(existing)
+        else:
+            session.add(
+                TemplateVariable(
+                    template_id=template_id,
+                    name=name,
+                    label=(incoming.label if incoming and incoming.label else name.replace("_", " ").title()),
+                    type=incoming.type if incoming else "text",
+                    required=incoming.required if incoming else True,
+                    default_value=incoming.default_value if incoming else None,
+                    sample_value=incoming.sample_value if incoming else None,
+                    description=incoming.description if incoming else None,
+                )
+            )
+
+    template.name = payload.name
+    template.updated_at = now_utc()
+    session.add(template)
+    session.commit()
+    return _template_detail(session, template_id)
