@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: auto-document-generator-backend
+    runtime: python
+    plan: free
+    rootDir: backend/app
+    buildCommand: pip install -r requirements.txt
+    startCommand: python main.py
+    healthCheckPath: /api/health
+    autoDeploy: true
+    envVars:
+      - key: FRONTEND_ORIGIN
+        value: https://auto-document-generator-zsep.vercel.app
+      - key: PYTHON_VERSION
+        value: 3.12.8

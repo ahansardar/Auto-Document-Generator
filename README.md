@@ -45,6 +45,13 @@ This starts both services:
 
 If the backend runs somewhere else, set `NEXT_PUBLIC_API_BASE`.
 
+## Production Deployment
+
+- Deploy the backend to Render with the root `render.yaml` blueprint.
+- Deploy the frontend to Vercel with Root Directory set to `frontend`.
+- In Vercel, set `NEXT_PUBLIC_API_BASE` to the Render backend URL, for example `https://your-render-service.onrender.com`.
+- In Render, set `FRONTEND_ORIGIN` to the Vercel frontend URL.
+
 ## API Endpoints
 
 - `POST /api/templates/upload`
