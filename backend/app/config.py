@@ -13,7 +13,12 @@ class Settings(BaseSettings):
 
     @property
     def frontend_origins(self) -> list[str]:
-        return [origin.strip() for origin in self.frontend_origin.split(",") if origin.strip()]
+        configured_origins = [origin.strip() for origin in self.frontend_origin.split(",") if origin.strip()]
+        default_origins = [
+            "https://auto-document-generator.vercel.app",
+            "https://auto-document-generator-zsep.vercel.app",
+        ]
+        return list(dict.fromkeys([*configured_origins, *default_origins]))
 
     @property
     def originals_dir(self) -> Path:
