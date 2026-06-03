@@ -126,7 +126,7 @@ def draw_text_element(page: fitz.Page, element: TemplateTextElement, data: dict[
     )
 
 
-def generate_pdf_from_template(session: Session, template_id: str, data: dict) -> GeneratedDocument:
+def render_pdf_bytes_from_template(session: Session, template_id: str, data: dict) -> tuple[bytes, dict[str, str]]:
     template = session.get(Template, template_id)
     if not template:
         raise HTTPException(status_code=404, detail="Template not found")
@@ -165,10 +165,18 @@ def generate_pdf_from_template(session: Session, template_id: str, data: dict) -
         if 0 <= page_index < len(document):
             draw_text_element(document[page_index], element, generation_data)
 
+    pdf_bytes = document.tobytes(garbage=4, deflate=True)
+    document.close()
+
+    return pdf_bytes, generation_data
+
+
+def generate_pdf_from_template(session: Session, template_id: str, data: dict) -> GeneratedDocument:
+    pdf_bytes, generation_data = render_pdf_bytes_from_template(session, template_id, data)
+
     storage = StorageService()
     output_path = storage.generated_path(f"{template_id}-{uuid4()}.pdf")
-    document.save(output_path, garbage=4, deflate=True)
-    document.close()
+    output_path.write_bytes(pdf_bytes)
 
     generated = GeneratedDocument(
         template_id=template_id,

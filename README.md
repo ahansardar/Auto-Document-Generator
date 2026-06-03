@@ -51,6 +51,8 @@ If the backend runs somewhere else, set `NEXT_PUBLIC_API_BASE`.
 - Deploy the frontend to Vercel with Root Directory set to `frontend`.
 - In Vercel, set `NEXT_PUBLIC_API_BASE` to the Render backend URL, for example `https://your-render-service.onrender.com`.
 - In Render, set `FRONTEND_ORIGIN` to the Vercel frontend URL.
+- To email certificates, deploy `docs/apps-script-certificate-mailer.gs` as a Google Apps Script Web App and set Render env `APPS_SCRIPT_WEBHOOK_URL` to that Web App URL.
+- Email-batch certificates are rendered in memory and sent to Apps Script immediately; they are not saved as generated files in backend storage.
 
 ## API Endpoints
 

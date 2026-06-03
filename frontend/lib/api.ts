@@ -1,4 +1,4 @@
-import type { BatchResult, EditorFont, Template, TemplateDetail, TemplateVariable, TextElement } from "./types";
+import type { BatchMailResult, BatchResult, EditorFont, MailTemplate, Template, TemplateDetail, TemplateVariable, TextElement } from "./types";
 
 export const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:8000";
 
@@ -73,4 +73,11 @@ export async function generateBatch(id: string, file: File) {
   const form = new FormData();
   form.append("file", file);
   return request<BatchResult>(`/api/templates/${id}/generate-batch`, { method: "POST", body: form });
+}
+
+export async function emailBatch(id: string, file: File, mailTemplate: MailTemplate) {
+  const form = new FormData();
+  form.append("file", file);
+  form.append("mail_template_json", JSON.stringify(mailTemplate));
+  return request<BatchMailResult>(`/api/templates/${id}/email-batch`, { method: "POST", body: form });
 }

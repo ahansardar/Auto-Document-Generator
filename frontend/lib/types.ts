@@ -87,3 +87,29 @@ export type BatchResult = {
   generated_document_ids: string[];
   errors: { row: number; errors: string[] }[];
 };
+
+export type MailTemplate = {
+  email_column: string;
+  name_column?: string | null;
+  subject: string;
+  preheader?: string | null;
+  title: string;
+  greeting: string;
+  body: string;
+  button_text?: string | null;
+  footer?: string | null;
+  sender_name?: string | null;
+  reply_to?: string | null;
+  primary_color: string;
+  background_color: string;
+  card_color: string;
+  text_color: string;
+  font_family: string;
+  attachment_filename: string;
+};
+
+export type BatchMailResult = {
+  attempted: number;
+  sent: number;
+  errors: { row: number; errors: string[] }[];
+};

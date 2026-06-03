@@ -13,3 +13,5 @@ services:
         value: https://auto-document-generator.vercel.app,https://auto-document-generator-zsep.vercel.app
       - key: PYTHON_VERSION
         value: 3.12.8
+      - key: APPS_SCRIPT_WEBHOOK_URL
+        sync: false

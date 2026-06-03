@@ -8,6 +8,7 @@ import { getTemplate } from "@/lib/api";
 import type { TemplateDetail } from "@/lib/types";
 import { BatchUploadForm } from "@/components/generation/BatchUploadForm";
 import { DynamicVariableForm } from "@/components/generation/DynamicVariableForm";
+import { EmailBatchForm } from "@/components/generation/EmailBatchForm";
 
 export default function GeneratePage() {
   const params = useParams<{ id: string }>();
@@ -24,7 +25,7 @@ export default function GeneratePage() {
   if (!template) return <main className="p-8">Loading generation form...</main>;
 
   return (
-    <main className="mx-auto grid min-h-screen max-w-5xl gap-6 px-6 py-8">
+    <main className="mx-auto grid min-h-screen max-w-6xl gap-6 px-6 py-8">
       <header className="flex items-center justify-between">
         <div>
           <Link href={`/templates/${template.id}/editor`} className="mb-3 inline-flex items-center gap-2 text-sm text-zinc-600">
@@ -37,6 +38,7 @@ export default function GeneratePage() {
         <DynamicVariableForm templateId={template.id} variables={template.variables} />
         <BatchUploadForm templateId={template.id} variables={template.variables} />
       </div>
+      <EmailBatchForm templateId={template.id} variables={template.variables} />
     </main>
   );
 }

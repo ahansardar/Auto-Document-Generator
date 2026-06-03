@@ -10,6 +10,7 @@ class Settings(BaseSettings):
     database_url: str = "sqlite:///data/app.db"
     max_upload_bytes: int = 25 * 1024 * 1024
     frontend_origin: str = "http://localhost:3000"
+    apps_script_webhook_url: str | None = None
 
     @property
     def frontend_origins(self) -> list[str]:
