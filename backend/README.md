@@ -12,3 +12,8 @@ uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
 SQLite is created at `data/app.db`. Storage directories are created at startup.
+
+Render deployment:
+
+- If the Root Directory is `backend`, use `uvicorn app.main:app --host 0.0.0.0 --port $PORT`.
+- If the Root Directory is `backend/app`, use `python main.py`.

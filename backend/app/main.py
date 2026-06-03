@@ -1,5 +1,12 @@
+import os
+import sys
+from pathlib import Path
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+
+if __package__ in {None, ""}:
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from app.api import editor, generation, templates, uploads
 from app.config import get_settings
@@ -35,3 +42,9 @@ app.include_router(templates.router)
 app.include_router(generation.router)
 app.include_router(uploads.router)
 app.include_router(editor.router)
+
+
+if __name__ == "__main__":
+    import uvicorn
+
+    uvicorn.run(app, host="0.0.0.0", port=int(os.environ.get("PORT", "8000")))
