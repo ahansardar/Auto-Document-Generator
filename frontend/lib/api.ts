@@ -9,6 +9,9 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     const message = Array.isArray(payload.detail) ? payload.detail.join(", ") : payload.detail;
     throw new Error(message || "Request failed");
   }
+  if (response.status === 204) {
+    return undefined as T;
+  }
   return response.json() as Promise<T>;
 }
 
@@ -26,6 +29,10 @@ export function listTemplates() {
 
 export function getTemplate(id: string) {
   return request<TemplateDetail>(`/api/templates/${id}`);
+}
+
+export function deleteTemplate(id: string) {
+  return request<void>(`/api/templates/${id}`, { method: "DELETE" });
 }
 
 export function getEditorFonts() {

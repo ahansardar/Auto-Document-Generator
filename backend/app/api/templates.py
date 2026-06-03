@@ -5,6 +5,7 @@ from fastapi.responses import FileResponse
 from sqlmodel import Session, delete, select
 
 from app.database import get_session
+from app.models.generated_document import GeneratedDocument
 from app.models.template import Template, TemplatePage, now_utc
 from app.models.text_element import TemplateTextElement
 from app.models.variable import TemplateVariable
@@ -31,6 +32,14 @@ def _template_detail(session: Session, template_id: str) -> TemplateDetailOut:
             "variables": variables,
         }
     )
+
+
+def _delete_file(path_value: str | None) -> None:
+    if not path_value:
+        return
+    path = Path(path_value)
+    if path.exists() and path.is_file():
+        path.unlink()
 
 
 @router.post("/upload", response_model=TemplateDetailOut)
@@ -91,6 +100,25 @@ def update_template(template_id: str, payload: TemplateUpdateIn, session: Sessio
     session.add(template)
     session.commit()
     return _template_detail(session, template_id)
+
+
+@router.delete("/{template_id}", status_code=204)
+def delete_template(template_id: str, session: Session = Depends(get_session)) -> None:
+    template = session.get(Template, template_id)
+    if not template:
+        raise HTTPException(status_code=404, detail="Template not found")
+
+    generated_documents = session.exec(select(GeneratedDocument).where(GeneratedDocument.template_id == template_id)).all()
+    for document in generated_documents:
+        _delete_file(document.generated_pdf_path)
+        session.delete(document)
+
+    session.exec(delete(TemplateVariable).where(TemplateVariable.template_id == template_id))
+    session.exec(delete(TemplateTextElement).where(TemplateTextElement.template_id == template_id))
+    session.exec(delete(TemplatePage).where(TemplatePage.template_id == template_id))
+    _delete_file(template.original_pdf_path)
+    session.delete(template)
+    session.commit()
 
 
 @router.put("/{template_id}/pages", response_model=TemplateDetailOut)
