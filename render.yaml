@@ -10,6 +10,6 @@ services:
     autoDeploy: true
     envVars:
       - key: FRONTEND_ORIGIN
-        value: https://auto-document-generator-zsep.vercel.app
+        value: https://auto-document-generator.vercel.app,https://auto-document-generator-zsep.vercel.app
       - key: PYTHON_VERSION
         value: 3.12.8
