@@ -7,8 +7,17 @@ from app.config import get_settings
 
 settings = get_settings()
 settings.data_dir.mkdir(parents=True, exist_ok=True)
+
+
+def resolve_database_url() -> str:
+    if settings.database_url == "sqlite:///data/app.db":
+        return f"sqlite:///{(settings.data_dir / 'app.db').as_posix()}"
+
+    return settings.database_url
+
+
 engine = create_engine(
-    settings.database_url,
+    resolve_database_url(),
     connect_args={"check_same_thread": False},
 )
 
