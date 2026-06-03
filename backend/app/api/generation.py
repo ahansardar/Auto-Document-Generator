@@ -11,7 +11,7 @@ from app.models.variable import TemplateVariable
 from app.schemas.generation import BatchGenerateResponse, GenerateRequest, GenerateResponse
 from app.services.pdf_service import generate_batch_from_template, generate_pdf_from_template
 from app.services.storage_service import StorageService
-from app.services.validation_service import validate_batch_rows
+from app.services.validation_service import validate_batch_rows, validate_batch_upload_schema
 from app.utils.csv_utils import parse_csv_to_rows, parse_json_to_rows
 
 router = APIRouter(tags=["generation"])
@@ -36,6 +36,7 @@ async def generate_batch(template_id: str, file: UploadFile = File(...), session
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     variables = list(session.exec(select(TemplateVariable).where(TemplateVariable.template_id == template_id)).all())
+    validate_batch_upload_schema(variables, rows)
     valid_rows, errors = validate_batch_rows(variables, rows)
     generated = generate_batch_from_template(session, template_id, valid_rows)
     files = [Path(document.generated_pdf_path) for document in generated]

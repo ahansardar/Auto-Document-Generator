@@ -8,7 +8,7 @@ from app.database import get_session
 from app.models.template import Template, TemplatePage, now_utc
 from app.models.text_element import TemplateTextElement
 from app.models.variable import TemplateVariable
-from app.schemas.template import TemplateDetailOut, TemplateListOut, TemplateSaveLayoutIn, TemplateUpdateIn
+from app.schemas.template import TemplateDetailOut, TemplateListOut, TemplatePageLayoutIn, TemplateSaveLayoutIn, TemplateUpdateIn
 from app.services.pdf_service import read_pdf_pages
 from app.services.storage_service import StorageService
 from app.utils.text_utils import extract_variables_from_elements
@@ -93,6 +93,66 @@ def update_template(template_id: str, payload: TemplateUpdateIn, session: Sessio
     return _template_detail(session, template_id)
 
 
+@router.put("/{template_id}/pages", response_model=TemplateDetailOut)
+def update_pages(template_id: str, payload: TemplatePageLayoutIn, session: Session = Depends(get_session)) -> TemplateDetailOut:
+    template = session.get(Template, template_id)
+    if not template:
+        raise HTTPException(status_code=404, detail="Template not found")
+
+    requested_sources = payload.source_page_numbers
+    if not requested_sources:
+        raise HTTPException(status_code=422, detail="Template must keep at least one page")
+    if len(requested_sources) != len(set(requested_sources)):
+        raise HTTPException(status_code=422, detail="Page order cannot contain duplicates")
+
+    pages = session.exec(select(TemplatePage).where(TemplatePage.template_id == template_id)).all()
+    pages_by_source = {page.source_page_number or page.page_number: page for page in pages}
+    missing_sources = [source for source in requested_sources if source not in pages_by_source]
+    if missing_sources:
+        raise HTTPException(status_code=422, detail=f"Unknown template pages: {', '.join(map(str, missing_sources))}")
+
+    old_page_by_source = {
+        page.source_page_number or page.page_number: page.page_number
+        for page in pages
+    }
+    new_page_by_old_page = {
+        old_page_by_source[source]: index
+        for index, source in enumerate(requested_sources, start=1)
+    }
+
+    for page in pages:
+        source_page_number = page.source_page_number or page.page_number
+        if source_page_number not in requested_sources:
+            session.delete(page)
+            continue
+        page.page_number = requested_sources.index(source_page_number) + 1
+        page.source_page_number = source_page_number
+        session.add(page)
+
+    elements = session.exec(select(TemplateTextElement).where(TemplateTextElement.template_id == template_id)).all()
+    remaining_elements: list[TemplateTextElement] = []
+    for element in elements:
+        new_page_number = new_page_by_old_page.get(element.page_number)
+        if new_page_number is None:
+            session.delete(element)
+            continue
+        element.page_number = new_page_number
+        element.updated_at = now_utc()
+        session.add(element)
+        remaining_elements.append(element)
+
+    remaining_variable_names = set(extract_variables_from_elements(remaining_elements))
+    for variable in session.exec(select(TemplateVariable).where(TemplateVariable.template_id == template_id)).all():
+        if variable.name not in remaining_variable_names:
+            session.delete(variable)
+
+    template.page_count = len(requested_sources)
+    template.updated_at = now_utc()
+    session.add(template)
+    session.commit()
+    return _template_detail(session, template_id)
+
+
 @router.post("/{template_id}/save-layout", response_model=TemplateDetailOut)
 def save_layout(template_id: str, payload: TemplateSaveLayoutIn, session: Session = Depends(get_session)) -> TemplateDetailOut:
     template = session.get(Template, template_id)
@@ -134,6 +194,8 @@ def save_layout(template_id: str, payload: TemplateSaveLayoutIn, session: Sessio
                 existing.default_value = incoming.default_value
                 existing.sample_value = incoming.sample_value
                 existing.description = incoming.description
+                existing.generator_enabled = incoming.generator_enabled
+                existing.generator_pattern = incoming.generator_pattern
             existing.updated_at = now_utc()
             session.add(existing)
         else:
@@ -147,6 +209,8 @@ def save_layout(template_id: str, payload: TemplateSaveLayoutIn, session: Sessio
                     default_value=incoming.default_value if incoming else None,
                     sample_value=incoming.sample_value if incoming else None,
                     description=incoming.description if incoming else None,
+                    generator_enabled=incoming.generator_enabled if incoming else False,
+                    generator_pattern=incoming.generator_pattern if incoming else None,
                 )
             )
 

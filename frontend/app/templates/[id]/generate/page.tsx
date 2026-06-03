@@ -35,7 +35,7 @@ export default function GeneratePage() {
       </header>
       <div className="grid gap-6 md:grid-cols-2">
         <DynamicVariableForm templateId={template.id} variables={template.variables} />
-        <BatchUploadForm templateId={template.id} />
+        <BatchUploadForm templateId={template.id} variables={template.variables} />
       </div>
     </main>
   );

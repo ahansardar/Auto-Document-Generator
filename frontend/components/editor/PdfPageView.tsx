@@ -12,17 +12,18 @@ type Props = {
   preview: boolean;
   sampleData: Record<string, string>;
   onSelect: (id: string) => void;
-  onChange: (element: TextElement) => void;
+  onPatch: (id: string, patch: Partial<TextElement>, recordHistory?: boolean) => void;
+  onBeforeChange: () => void;
   onDelete: (id: string) => void;
   onDuplicate: (id: string) => void;
 };
 
-export function PdfPageView({ page, zoom, elements, selectedId, preview, sampleData, onSelect, onChange, onDelete, onDuplicate }: Props) {
+export function PdfPageView({ page, zoom, elements, selectedId, preview, sampleData, onSelect, onPatch, onBeforeChange, onDelete, onDuplicate }: Props) {
   const width = page.width * zoom;
   const height = page.height * zoom;
   return (
-    <div className="relative" style={{ width, minHeight: height }}>
-      <Page pageNumber={page.page_number} width={width} renderAnnotationLayer={false} />
+    <div className="relative" style={{ width, height }}>
+      <Page pageNumber={page.source_page_number} width={width} renderTextLayer={false} renderAnnotationLayer={false} />
       <TextOverlay
         pageNumber={page.page_number}
         elements={elements}
@@ -31,7 +32,8 @@ export function PdfPageView({ page, zoom, elements, selectedId, preview, sampleD
         preview={preview}
         sampleData={sampleData}
         onSelect={onSelect}
-        onChange={onChange}
+        onPatch={onPatch}
+        onBeforeChange={onBeforeChange}
         onDelete={onDelete}
         onDuplicate={onDuplicate}
       />

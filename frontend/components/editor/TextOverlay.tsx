@@ -11,14 +11,15 @@ type Props = {
   preview: boolean;
   sampleData: Record<string, string>;
   onSelect: (id: string) => void;
-  onChange: (element: TextElement) => void;
+  onPatch: (id: string, patch: Partial<TextElement>, recordHistory?: boolean) => void;
+  onBeforeChange: () => void;
   onDelete: (id: string) => void;
   onDuplicate: (id: string) => void;
 };
 
 export function TextOverlay(props: Props) {
   return (
-    <div className="absolute inset-0">
+    <div className="pointer-events-none absolute inset-0 z-30">
       {props.elements
         .filter((element) => element.page_number === props.pageNumber)
         .map((element) => (
@@ -30,7 +31,8 @@ export function TextOverlay(props: Props) {
             preview={props.preview}
             sampleData={props.sampleData}
             onSelect={() => props.onSelect(element.id)}
-            onChange={props.onChange}
+            onPatch={props.onPatch}
+            onBeforeChange={props.onBeforeChange}
             onDelete={() => props.onDelete(element.id)}
             onDuplicate={() => props.onDuplicate(element.id)}
           />

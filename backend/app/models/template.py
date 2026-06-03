@@ -24,5 +24,6 @@ class TemplatePage(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     template_id: str = Field(index=True, foreign_key="template.id")
     page_number: int
+    source_page_number: int
     width: float
     height: float

@@ -1,4 +1,4 @@
-import type { BatchResult, Template, TemplateDetail, TemplateVariable, TextElement } from "./types";
+import type { BatchResult, EditorFont, Template, TemplateDetail, TemplateVariable, TextElement } from "./types";
 
 export const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:8000";
 
@@ -28,6 +28,10 @@ export function getTemplate(id: string) {
   return request<TemplateDetail>(`/api/templates/${id}`);
 }
 
+export function getEditorFonts() {
+  return request<EditorFont[]>("/api/editor/fonts");
+}
+
 export async function uploadTemplate(file: File) {
   const form = new FormData();
   form.append("file", file);
@@ -39,6 +43,14 @@ export function saveLayout(id: string, payload: { name: string; text_elements: T
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload)
+  });
+}
+
+export function updatePageLayout(id: string, sourcePageNumbers: number[]) {
+  return request<TemplateDetail>(`/api/templates/${id}/pages`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ source_page_numbers: sourcePageNumbers })
   });
 }
 

@@ -16,5 +16,7 @@ class TemplateVariable(SQLModel, table=True):
     default_value: Optional[str] = None
     sample_value: Optional[str] = None
     description: Optional[str] = None
+    generator_enabled: bool = False
+    generator_pattern: Optional[str] = None
     created_at: datetime = Field(default_factory=now_utc)
     updated_at: datetime = Field(default_factory=now_utc)

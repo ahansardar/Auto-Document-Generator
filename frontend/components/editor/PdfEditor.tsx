@@ -3,9 +3,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Document, pdfjs } from "react-pdf";
-import { getTemplate, originalPdfUrl, saveLayout } from "@/lib/api";
-import type { TemplateDetail, TemplateVariable, TextElement } from "@/lib/types";
-import { extractVariablesFromElements } from "@/lib/variables";
+import { getEditorFonts, getTemplate, originalPdfUrl, saveLayout, updatePageLayout } from "@/lib/api";
+import type { EditorFont, TemplateDetail, TemplatePage, TemplateVariable, TextElement } from "@/lib/types";
+import { extractVariablesFromElements, firstVariableName, normalizeVariableName } from "@/lib/variables";
 import { FormattingPanel } from "./FormattingPanel";
 import { PageSidebar } from "./PageSidebar";
 import { PdfPageView } from "./PdfPageView";
@@ -14,11 +14,34 @@ import { VariableManager } from "./VariableManager";
 
 pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
 
-function newTextElement(pageNumber: number, zIndex: number): TextElement {
+function newVariable(name: string): TemplateVariable {
+  return {
+    name,
+    label: name.replaceAll("_", " "),
+    type: "text",
+    required: true,
+    default_value: "",
+    sample_value: "",
+    description: "",
+    generator_enabled: false,
+    generator_pattern: ""
+  };
+}
+
+function normalizeVariable(variable: TemplateVariable): TemplateVariable {
+  return {
+    ...variable,
+    label: variable.label || variable.name.replaceAll("_", " "),
+    generator_enabled: variable.generator_enabled ?? false,
+    generator_pattern: variable.generator_pattern ?? ""
+  };
+}
+
+function newTextElement(pageNumber: number, zIndex: number, fieldName: string): TextElement {
   return {
     id: crypto.randomUUID(),
     page_number: pageNumber,
-    content: "{{student_name}}",
+    content: `{{${fieldName}}}`,
     x: 120,
     y: 120,
     width: 260,
@@ -58,13 +81,25 @@ function newTextElement(pageNumber: number, zIndex: number): TextElement {
 }
 
 function mergeDetectedVariables(variables: TemplateVariable[], elements: TextElement[]) {
-  const existing = new Map(variables.map((variable) => [variable.name, variable]));
+  const existing = new Map(variables.map((variable) => [variable.name, normalizeVariable(variable)]));
   for (const name of extractVariablesFromElements(elements)) {
     if (!existing.has(name)) {
-      existing.set(name, { name, label: name.replaceAll("_", " "), type: "text", required: true, default_value: "", sample_value: "", description: "" });
+      existing.set(name, newVariable(name));
     }
   }
   return Array.from(existing.values()).sort((left, right) => left.name.localeCompare(right.name));
+}
+
+type EditorState = {
+  elements: TextElement[];
+  variables: TemplateVariable[];
+};
+
+function cloneEditorState(elements: TextElement[], variables: TemplateVariable[]): EditorState {
+  return {
+    elements: elements.map((element) => ({ ...element })),
+    variables: variables.map((variable) => ({ ...variable }))
+  };
 }
 
 export function PdfEditor({ templateId }: { templateId: string }) {
@@ -78,6 +113,9 @@ export function PdfEditor({ templateId }: { templateId: string }) {
   const [preview, setPreview] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [fontOptions, setFontOptions] = useState<EditorFont[]>([{ family: "Helvetica", file_path: null }]);
+  const [past, setPast] = useState<EditorState[]>([]);
+  const [future, setFuture] = useState<EditorState[]>([]);
 
   useEffect(() => {
     getTemplate(templateId)
@@ -85,13 +123,56 @@ export function PdfEditor({ templateId }: { templateId: string }) {
         setTemplate(data);
         setElements(data.text_elements);
         setVariables(mergeDetectedVariables(data.variables, data.text_elements));
+        setPast([]);
+        setFuture([]);
       })
       .catch((err) => setError(err instanceof Error ? err.message : "Could not load template"));
   }, [templateId]);
 
   useEffect(() => {
+    getEditorFonts()
+      .then((fonts) => {
+        if (fonts.length) setFontOptions(fonts);
+      })
+      .catch(() => {
+        setFontOptions([{ family: "Helvetica", file_path: null }, { family: "Arial", file_path: null }, { family: "Times New Roman", file_path: null }]);
+      });
+  }, []);
+
+  useEffect(() => {
     setVariables((current) => mergeDetectedVariables(current, elements));
   }, [elements]);
+
+  useEffect(() => {
+    function handleKeyDown(event: KeyboardEvent) {
+      const isModifier = event.ctrlKey || event.metaKey;
+      if (!isModifier) return;
+      if (event.key.toLowerCase() === "z" && !event.shiftKey) {
+        event.preventDefault();
+        undo();
+      }
+      if (event.key.toLowerCase() === "y" || (event.key.toLowerCase() === "z" && event.shiftKey)) {
+        event.preventDefault();
+        redo();
+      }
+    }
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [elements, variables, past, future]);
+
+  useEffect(() => {
+    function handleDeleteKey(event: KeyboardEvent) {
+      const target = event.target as HTMLElement | null;
+      const isTyping = target?.tagName === "INPUT" || target?.tagName === "TEXTAREA" || target?.tagName === "SELECT" || target?.isContentEditable;
+      if (isTyping || !selectedId || (event.key !== "Delete" && event.key !== "Backspace")) return;
+      event.preventDefault();
+      deleteElement(selectedId);
+    }
+
+    window.addEventListener("keydown", handleDeleteKey);
+    return () => window.removeEventListener("keydown", handleDeleteKey);
+  }, [elements, variables, selectedId]);
 
   const selected = elements.find((element) => element.id === selectedId) ?? null;
   const page = template?.pages.find((item) => item.page_number === currentPage) ?? template?.pages[0];
@@ -100,23 +181,83 @@ export function PdfEditor({ templateId }: { templateId: string }) {
     [variables]
   );
 
+  useEffect(() => {
+    if (!page) return;
+    const fitForViewport = () => {
+      if (window.innerWidth >= 768) return;
+      const availableWidth = Math.max(280, window.innerWidth - 32);
+      setZoom(Math.max(0.35, Math.min(0.9, availableWidth / page.width)));
+    };
+    fitForViewport();
+    window.addEventListener("resize", fitForViewport);
+    return () => window.removeEventListener("resize", fitForViewport);
+  }, [page?.page_number, page?.width]);
+
   if (error) return <div className="p-8 text-red-600">{error}</div>;
   if (!template || !page) return <div className="p-8">Loading editor...</div>;
 
-  function updateElement(element: TextElement) {
+  function pushHistory() {
+    setPast((current) => [...current.slice(-49), cloneEditorState(elements, variables)]);
+    setFuture([]);
+  }
+
+  function restoreState(state: EditorState) {
+    setElements(state.elements);
+    setVariables(state.variables);
+    setSelectedId((current) => (state.elements.some((element) => element.id === current) ? current : null));
+  }
+
+  function undo() {
+    const previous = past[past.length - 1];
+    if (!previous) return;
+    setFuture((current) => [cloneEditorState(elements, variables), ...current.slice(0, 49)]);
+    setPast((current) => current.slice(0, -1));
+    restoreState(previous);
+  }
+
+  function redo() {
+    const next = future[0];
+    if (!next) return;
+    setPast((current) => [...current.slice(-49), cloneEditorState(elements, variables)]);
+    setFuture((current) => current.slice(1));
+    restoreState(next);
+  }
+
+  function updateElement(element: TextElement, recordHistory = true) {
+    if (recordHistory) pushHistory();
     setElements((current) => current.map((item) => (item.id === element.id ? element : item)));
+  }
+
+  function patchElement(id: string, patch: Partial<TextElement>, recordHistory = true) {
+    if (recordHistory) pushHistory();
+    setElements((current) => current.map((item) => (item.id === id ? { ...item, ...patch } : item)));
   }
 
   function addText() {
     if (!template) return;
-    const element = newTextElement(currentPage, elements.length + 1);
+    pushHistory();
+    const fieldName = nextFieldName();
+    const element = newTextElement(currentPage, elements.length + 1, fieldName);
     setElements((current) => [...current, element]);
+    setVariables((current) => mergeDetectedVariables([...current, newVariable(fieldName)], [...elements, element]));
     setSelectedId(element.id);
+  }
+
+  function nextFieldName() {
+    const names = new Set(variables.map((variable) => variable.name));
+    let index = variables.length + 1;
+    let name = `field_${index}`;
+    while (names.has(name)) {
+      index += 1;
+      name = `field_${index}`;
+    }
+    return name;
   }
 
   function duplicate(id: string) {
     const source = elements.find((element) => element.id === id);
     if (!source) return;
+    pushHistory();
     const clone = { ...source, id: crypto.randomUUID(), x: source.x + 20, y: source.y + 20, z_index: source.z_index + 1 };
     setElements((current) => [...current, clone]);
     setSelectedId(clone.id);
@@ -131,6 +272,8 @@ export function PdfEditor({ templateId }: { templateId: string }) {
       setTemplate(saved);
       setElements(saved.text_elements);
       setVariables(mergeDetectedVariables(saved.variables, saved.text_elements));
+      setPast([]);
+      setFuture([]);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Save failed");
     } finally {
@@ -138,58 +281,140 @@ export function PdfEditor({ templateId }: { templateId: string }) {
     }
   }
 
+  async function applyPageLayout(nextPages: TemplatePage[]) {
+    if (!template) return;
+    setSaving(true);
+    setError(null);
+    try {
+      const saved = await updatePageLayout(template.id, nextPages.map((page) => page.source_page_number));
+      setTemplate(saved);
+      setElements(saved.text_elements);
+      setVariables(mergeDetectedVariables(saved.variables, saved.text_elements));
+      const preferredPage = saved.pages.find((item) => item.page_number === currentPage) ?? saved.pages[0];
+      setCurrentPage(preferredPage?.page_number ?? 1);
+      setSelectedId(null);
+      setPast([]);
+      setFuture([]);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Page update failed");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function deletePage(pageToDelete: TemplatePage) {
+    if (!template || template.pages.length <= 1) return;
+    const confirmed = window.confirm(`Delete page ${pageToDelete.page_number} from this template? Text boxes on that page will be removed.`);
+    if (!confirmed) return;
+    void applyPageLayout(template.pages.filter((page) => page.source_page_number !== pageToDelete.source_page_number));
+  }
+
+  function movePage(pageToMove: TemplatePage, direction: "up" | "down") {
+    if (!template) return;
+    const pageIndex = template.pages.findIndex((page) => page.source_page_number === pageToMove.source_page_number);
+    const targetIndex = direction === "up" ? pageIndex - 1 : pageIndex + 1;
+    if (pageIndex < 0 || targetIndex < 0 || targetIndex >= template.pages.length) return;
+    const nextPages = [...template.pages];
+    [nextPages[pageIndex], nextPages[targetIndex]] = [nextPages[targetIndex], nextPages[pageIndex]];
+    void applyPageLayout(nextPages);
+  }
+
   function renameVariable(oldName: string, newName: string) {
     if (oldName === newName) return;
+    pushHistory();
     setElements((current) => current.map((element) => ({ ...element, content: element.content.replaceAll(`{{${oldName}}}`, `{{${newName}}}`) })));
   }
 
+  function renameSelectedVariable(rawName: string) {
+    if (!selected) return;
+    const newName = normalizeVariableName(rawName);
+    const oldName = firstVariableName(selected.content);
+    if (oldName === newName) return;
+    pushHistory();
+    const content = oldName ? selected.content.replaceAll(`{{${oldName}}}`, `{{${newName}}}`) : `{{${newName}}}`;
+    updateElement({ ...selected, content }, false);
+    setVariables((current) => {
+      const withoutDuplicate = current.filter((variable) => variable.name !== newName || variable.name === oldName);
+      return mergeDetectedVariables(
+        withoutDuplicate.map((variable) => (variable.name === oldName ? { ...variable, name: newName, label: variable.label || newName.replaceAll("_", " ") } : variable)),
+        elements.map((element) => (element.id === selected.id ? { ...element, content } : element))
+      );
+    });
+  }
+
+  function updateVariables(nextVariables: TemplateVariable[]) {
+    pushHistory();
+    setVariables(nextVariables);
+  }
+
+  function deleteElement(id: string) {
+    const deleted = elements.find((element) => element.id === id);
+    if (!deleted) return;
+    pushHistory();
+    const nextElements = elements.filter((element) => element.id !== id);
+    const deletedNames = extractVariablesFromElements([deleted]);
+    const stillUsedNames = new Set(extractVariablesFromElements(nextElements));
+    setElements(nextElements);
+    setVariables((current) => current.filter((variable) => !deletedNames.includes(variable.name) || stillUsedNames.has(variable.name)));
+    setSelectedId(null);
+  }
+
   return (
-    <div className="flex h-screen flex-col overflow-hidden">
+    <div className="flex min-h-dvh flex-col bg-canvas lg:h-screen lg:overflow-hidden">
       <TopToolbar
         name={template.name}
         zoom={zoom}
         saving={saving}
         preview={preview}
+        canUndo={past.length > 0}
+        canRedo={future.length > 0}
         onNameChange={(name) => setTemplate({ ...template, name })}
         onZoomChange={setZoom}
         onAddText={addText}
         onSave={() => void handleSave()}
+        onUndo={undo}
+        onRedo={redo}
+        onBackHome={() => router.push("/templates")}
         onPreviewToggle={() => setPreview((value) => !value)}
         onGenerate={() => router.push(`/templates/${template.id}/generate`)}
       />
-      <Document file={originalPdfUrl(template.id)} loading={<div className="p-6">Loading PDF...</div>}>
-        <div className="flex min-h-0 flex-1">
-          <PageSidebar pages={template.pages} currentPage={currentPage} onPageChange={setCurrentPage} />
-          <main className="min-w-0 flex-1 overflow-auto bg-canvas p-8" onClick={() => setSelectedId(null)}>
-            <div className="mx-auto w-fit" onClick={(event) => event.stopPropagation()}>
-              <PdfPageView
-                page={page}
-                zoom={zoom}
-                elements={elements}
-                selectedId={selectedId}
-                preview={preview}
-                sampleData={sampleData}
-                onSelect={setSelectedId}
+      <div className="min-h-0 flex-1 overflow-auto lg:overflow-hidden">
+        <Document className="min-h-full lg:h-full" file={originalPdfUrl(template.id)} loading={<div className="p-6">Loading PDF...</div>}>
+          <div className="flex min-h-full flex-col lg:h-[calc(100vh-4rem)] lg:min-h-0 lg:flex-row">
+            <PageSidebar pages={template.pages} currentPage={currentPage} onPageChange={setCurrentPage} onDeletePage={deletePage} onMovePage={movePage} />
+            <main className="min-w-0 flex-1 overflow-auto bg-canvas p-3 sm:p-6 lg:p-8" onClick={() => setSelectedId(null)}>
+              <div className="mx-auto w-fit max-w-full overflow-visible" onClick={(event) => event.stopPropagation()}>
+                <PdfPageView
+                  page={page}
+                  zoom={zoom}
+                  elements={elements}
+                  selectedId={selectedId}
+                  preview={preview}
+                  sampleData={sampleData}
+                  onSelect={setSelectedId}
+                  onPatch={patchElement}
+                  onBeforeChange={pushHistory}
+                  onDelete={deleteElement}
+                  onDuplicate={duplicate}
+                />
+              </div>
+            </main>
+            <aside className="w-full shrink-0 overflow-y-auto bg-white lg:h-[calc(100vh-4rem)] lg:w-96">
+              <FormattingPanel
+                element={selected}
+                linkedVariableName={selected ? firstVariableName(selected.content) : ""}
+                fontOptions={fontOptions}
                 onChange={updateElement}
-                onDelete={(id) => {
-                  setElements((current) => current.filter((element) => element.id !== id));
-                  setSelectedId(null);
-                }}
-                onDuplicate={duplicate}
+                onVariableNameChange={renameSelectedVariable}
+                onDelete={() => selected && deleteElement(selected.id)}
+                onBringForward={() => selected && updateElement({ ...selected, z_index: selected.z_index + 1 })}
+                onSendBackward={() => selected && updateElement({ ...selected, z_index: Math.max(0, selected.z_index - 1) })}
               />
-            </div>
-          </main>
-          <div className="flex h-full w-80 shrink-0 flex-col bg-white">
-            <FormattingPanel
-              element={selected}
-              onChange={updateElement}
-              onBringForward={() => selected && updateElement({ ...selected, z_index: selected.z_index + 1 })}
-              onSendBackward={() => selected && updateElement({ ...selected, z_index: Math.max(0, selected.z_index - 1) })}
-            />
-            <VariableManager variables={variables} elementContents={elements} onChange={setVariables} onRename={renameVariable} />
+              <VariableManager variables={variables} elementContents={elements} onChange={updateVariables} onRename={renameVariable} />
+            </aside>
           </div>
-        </div>
-      </Document>
+        </Document>
+      </div>
     </div>
   );
 }

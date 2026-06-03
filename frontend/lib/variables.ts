@@ -12,3 +12,17 @@ export function extractVariablesFromElements(elements: { content: string }[]) {
 export function replaceVariables(content: string, data: Record<string, string>) {
   return content.replace(variableToken, (_, name: string) => data[name] || name);
 }
+
+export function firstVariableName(content: string) {
+  return content.match(variableToken)?.[0]?.replace(/[{}\s]/g, "") ?? "";
+}
+
+export function normalizeVariableName(value: string) {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9_]+/g, "_")
+    .replace(/_+/g, "_")
+    .replace(/^_+|_+$/g, "")
+    .replace(/^[^a-z]+/, "") || "field";
+}

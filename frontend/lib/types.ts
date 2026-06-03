@@ -2,6 +2,7 @@ export type VariableType = "text" | "number" | "date" | "email" | "phone" | "mul
 
 export type TemplatePage = {
   page_number: number;
+  source_page_number: number;
   width: number;
   height: number;
 };
@@ -56,6 +57,13 @@ export type TemplateVariable = {
   default_value?: string | null;
   sample_value?: string | null;
   description?: string | null;
+  generator_enabled: boolean;
+  generator_pattern?: string | null;
+};
+
+export type EditorFont = {
+  family: string;
+  file_path?: string | null;
 };
 
 export type Template = {

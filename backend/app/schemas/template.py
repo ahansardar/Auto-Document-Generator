@@ -10,6 +10,7 @@ class TemplatePageOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     page_number: int
+    source_page_number: int
     width: float
     height: float
 
@@ -41,3 +42,7 @@ class TemplateSaveLayoutIn(BaseModel):
     name: str
     text_elements: list[TextElementIn]
     variables: list[VariableIn] = []
+
+
+class TemplatePageLayoutIn(BaseModel):
+    source_page_numbers: list[int]

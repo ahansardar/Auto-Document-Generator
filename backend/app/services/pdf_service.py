@@ -11,6 +11,7 @@ from app.models.template import Template, TemplatePage
 from app.models.text_element import TemplateTextElement
 from app.models.variable import TemplateVariable
 from app.services.coordinate_service import browser_to_pdf_coords
+from app.services.font_service import font_file_for_family
 from app.services.storage_service import StorageService
 from app.services.validation_service import validate_generation_data
 from app.utils.text_utils import replace_variables
@@ -24,7 +25,7 @@ def read_pdf_pages(path: Path) -> list[TemplatePage]:
 
     pages: list[TemplatePage] = []
     for index, page in enumerate(document, start=1):
-        pages.append(TemplatePage(page_number=index, width=page.rect.width, height=page.rect.height))
+        pages.append(TemplatePage(page_number=index, source_page_number=index, width=page.rect.width, height=page.rect.height))
     document.close()
     return pages
 
@@ -38,14 +39,18 @@ def _hex_to_rgb(color: str | None) -> tuple[float, float, float]:
     return tuple(int(value[i : i + 2], 16) / 255 for i in (0, 2, 4))
 
 
-def _fitz_font(element: TemplateTextElement) -> str:
+def _fitz_font(element: TemplateTextElement) -> tuple[str, str | None]:
+    font_file = font_file_for_family(element.font_family)
+    if font_file:
+        safe_name = "".join(character for character in element.font_family if character.isalnum()) or "custom"
+        return (safe_name[:32], font_file)
     if element.is_bold and element.is_italic:
-        return "hebo"
+        return ("hebo", None)
     if element.is_bold:
-        return "hebo"
+        return ("hebo", None)
     if element.is_italic:
-        return "heit"
-    return "helv"
+        return ("heit", None)
+    return ("helv", None)
 
 
 def _apply_transform(text: str, transform: str) -> str:
@@ -90,13 +95,15 @@ def draw_text_element(page: fitz.Page, element: TemplateTextElement, data: dict[
         rect.y1 - element.padding_bottom,
     )
     fontsize = element.font_size
+    fontname, fontfile = _fitz_font(element)
     if element.auto_shrink:
         while fontsize > 4:
             result = page.insert_textbox(
                 text_rect,
                 content,
                 fontsize=fontsize,
-                fontname=_fitz_font(element),
+                fontname=fontname,
+                fontfile=fontfile,
                 color=_hex_to_rgb(element.text_color),
                 align=_align_value(element.text_align),
                 fill_opacity=element.text_opacity,
@@ -110,7 +117,8 @@ def draw_text_element(page: fitz.Page, element: TemplateTextElement, data: dict[
         text_rect,
         content,
         fontsize=fontsize,
-        fontname=_fitz_font(element),
+        fontname=fontname,
+        fontfile=fontfile,
         color=_hex_to_rgb(element.text_color),
         align=_align_value(element.text_align),
         fill_opacity=element.text_opacity,
@@ -135,7 +143,23 @@ def generate_pdf_from_template(session: Session, template_id: str, data: dict) -
     if not original_path.exists():
         raise HTTPException(status_code=404, detail="Original template PDF is missing from storage")
 
-    document = fitz.open(original_path)
+    source_document = fitz.open(original_path)
+    pages = session.exec(
+        select(TemplatePage)
+        .where(TemplatePage.template_id == template_id)
+        .order_by(TemplatePage.page_number)
+    ).all()
+    if not pages:
+        source_document.close()
+        raise HTTPException(status_code=422, detail="Template has no active pages")
+
+    document = fitz.open()
+    for page in pages:
+        source_index = (page.source_page_number or page.page_number) - 1
+        if 0 <= source_index < len(source_document):
+            document.insert_pdf(source_document, from_page=source_index, to_page=source_index)
+    source_document.close()
+
     for element in elements:
         page_index = element.page_number - 1
         if 0 <= page_index < len(document):

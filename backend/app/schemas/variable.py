@@ -13,6 +13,8 @@ class VariableIn(BaseModel):
     default_value: Optional[str] = None
     sample_value: Optional[str] = None
     description: Optional[str] = None
+    generator_enabled: bool = False
+    generator_pattern: Optional[str] = None
 
 
 class VariableOut(BaseModel):
@@ -26,3 +28,5 @@ class VariableOut(BaseModel):
     default_value: Optional[str] = None
     sample_value: Optional[str] = None
     description: Optional[str] = None
+    generator_enabled: bool
+    generator_pattern: Optional[str] = None

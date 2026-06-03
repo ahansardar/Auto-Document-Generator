@@ -12,12 +12,13 @@ type Props = {
   preview: boolean;
   sampleData: Record<string, string>;
   onSelect: () => void;
-  onChange: (element: TextElement) => void;
+  onPatch: (id: string, patch: Partial<TextElement>, recordHistory?: boolean) => void;
+  onBeforeChange: () => void;
   onDelete: () => void;
   onDuplicate: () => void;
 };
 
-export function TextBox({ element, scale, selected, preview, sampleData, onSelect, onChange, onDelete, onDuplicate }: Props) {
+export function TextBox({ element, scale, selected, preview, sampleData, onSelect, onPatch, onBeforeChange, onDelete, onDuplicate }: Props) {
   const left = element.x * scale;
   const top = element.y * scale;
   const width = element.width * scale;
@@ -26,44 +27,52 @@ export function TextBox({ element, scale, selected, preview, sampleData, onSelec
   function startDrag(event: PointerEvent<HTMLDivElement>) {
     if (element.locked || preview) return;
     event.preventDefault();
+    event.stopPropagation();
     onSelect();
+    onBeforeChange();
     const startX = event.clientX;
     const startY = event.clientY;
     const original = { x: element.x, y: element.y };
-    const target = event.currentTarget;
-    target.setPointerCapture(event.pointerId);
-    target.onpointermove = (moveEvent) => {
-      onChange({
-        ...element,
+
+    const move = (moveEvent: globalThis.PointerEvent) => {
+      onPatch(element.id, {
         x: Math.max(0, original.x + (moveEvent.clientX - startX) / scale),
         y: Math.max(0, original.y + (moveEvent.clientY - startY) / scale)
-      });
+      }, false);
     };
-    target.onpointerup = () => {
-      target.onpointermove = null;
-      target.onpointerup = null;
+
+    const end = () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", end);
     };
+
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", end);
   }
 
   function startResize(event: PointerEvent<HTMLButtonElement>) {
     if (element.locked || preview) return;
+    event.preventDefault();
     event.stopPropagation();
+    onBeforeChange();
     const startX = event.clientX;
     const startY = event.clientY;
     const original = { width: element.width, height: element.height };
-    const target = event.currentTarget;
-    target.setPointerCapture(event.pointerId);
-    target.onpointermove = (moveEvent) => {
-      onChange({
-        ...element,
+
+    const move = (moveEvent: globalThis.PointerEvent) => {
+      onPatch(element.id, {
         width: Math.max(8, original.width + (moveEvent.clientX - startX) / scale),
         height: Math.max(8, original.height + (moveEvent.clientY - startY) / scale)
-      });
+      }, false);
     };
-    target.onpointerup = () => {
-      target.onpointermove = null;
-      target.onpointerup = null;
+
+    const end = () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", end);
     };
+
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", end);
   }
 
   const displayText = preview ? replaceVariables(element.content, sampleData) : element.content;
@@ -74,7 +83,7 @@ export function TextBox({ element, scale, selected, preview, sampleData, onSelec
       tabIndex={0}
       onPointerDown={startDrag}
       onClick={onSelect}
-      className={`absolute whitespace-pre-wrap ${selected && !preview ? "outline outline-2 outline-blue-500" : "outline-none"}`}
+      className={`pointer-events-auto absolute cursor-move select-none touch-none whitespace-pre-wrap ${selected && !preview ? "outline outline-2 outline-blue-500" : "outline-none"}`}
       style={{
         left,
         top,
@@ -108,14 +117,14 @@ export function TextBox({ element, scale, selected, preview, sampleData, onSelec
       {displayText}
       {selected && !preview ? (
         <>
-          <div className="absolute -top-9 left-0 flex gap-1 rounded bg-ink p-1 text-white shadow">
-            <button title={element.locked ? "Unlock" : "Lock"} className="p-1" onClick={(event) => { event.stopPropagation(); onChange({ ...element, locked: !element.locked }); }}>
+          <div className="absolute -top-9 left-0 flex gap-1 rounded bg-ink p-1 text-white shadow" onPointerDown={(event) => event.stopPropagation()}>
+            <button aria-label={element.locked ? "Unlock text box" : "Lock text box"} title={element.locked ? "Unlock" : "Lock"} className="p-1" onClick={(event) => { event.stopPropagation(); onPatch(element.id, { locked: !element.locked }); }}>
               {element.locked ? <Unlock className="h-3.5 w-3.5" /> : <Lock className="h-3.5 w-3.5" />}
             </button>
-            <button title="Duplicate" className="p-1" onClick={(event) => { event.stopPropagation(); onDuplicate(); }}>
+            <button aria-label="Duplicate text box" title="Duplicate" className="p-1" onClick={(event) => { event.stopPropagation(); onDuplicate(); }}>
               <Copy className="h-3.5 w-3.5" />
             </button>
-            <button title="Delete" className="p-1" onClick={(event) => { event.stopPropagation(); onDelete(); }}>
+            <button aria-label="Delete text box" title="Delete" className="p-1" onClick={(event) => { event.stopPropagation(); onDelete(); }}>
               <Trash2 className="h-3.5 w-3.5" />
             </button>
           </div>
