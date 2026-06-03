@@ -1,6 +1,7 @@
 import type { BatchResult, EditorFont, Template, TemplateDetail, TemplateVariable, TextElement } from "./types";
 
-export const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:8000";
+export const API_BASE =
+  process.env.NEXT_PUBLIC_API_BASE ?? (process.env.NODE_ENV === "production" ? "" : "http://localhost:8000");
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`${API_BASE}${path}`, init);
