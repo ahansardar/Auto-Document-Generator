@@ -1,4 +1,5 @@
 from functools import lru_cache
+import os
 from pathlib import Path
 
 from pydantic_settings import BaseSettings
@@ -36,11 +37,18 @@ class Settings(BaseSettings):
 
     @property
     def app_data_root(self) -> Path:
-        return self.persistent_storage_dir or self.backend_dir
+        if self.persistent_storage_dir and self._is_writable_or_mount_candidate(self.persistent_storage_dir):
+            return self.persistent_storage_dir
+        return self.backend_dir
 
     @property
     def storage_root(self) -> Path:
         return self.app_data_root / "storage"
+
+    def _is_writable_or_mount_candidate(self, path: Path) -> bool:
+        if not path.exists():
+            return False
+        return os.access(path, os.W_OK)
 
 
 @lru_cache
