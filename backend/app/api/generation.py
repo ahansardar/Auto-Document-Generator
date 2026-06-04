@@ -99,14 +99,17 @@ def list_generated(session: Session = Depends(get_session)) -> list[GeneratedDoc
 @router.get("/api/generated/{document_id}/download")
 def download_generated(document_id: str, session: Session = Depends(get_session)) -> FileResponse:
     document = session.get(GeneratedDocument, document_id)
-    if not document or not Path(document.generated_pdf_path).exists():
+    if not document:
         raise HTTPException(status_code=404, detail="Generated PDF not found")
-    return FileResponse(document.generated_pdf_path, media_type="application/pdf", filename=f"{document_id}.pdf")
+    path = Path(document.generated_pdf_path)
+    if not StorageService().ensure_local_file(path):
+        raise HTTPException(status_code=404, detail="Generated PDF not found")
+    return FileResponse(path, media_type="application/pdf", filename=f"{document_id}.pdf")
 
 
 @router.get("/api/generated/download-file/{filename}")
 def download_generated_file(filename: str) -> FileResponse:
     path = StorageService().generated_path(filename)
-    if not path.exists():
+    if not StorageService().ensure_local_file(path):
         raise HTTPException(status_code=404, detail="Generated file not found")
     return FileResponse(path, media_type="application/zip", filename=filename)

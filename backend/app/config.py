@@ -13,6 +13,10 @@ class Settings(BaseSettings):
     frontend_origin: str = "http://localhost:3000"
     apps_script_webhook_url: str | None = None
     persistent_storage_dir: Path | None = None
+    supabase_url: str | None = None
+    supabase_service_role_key: str | None = None
+    supabase_bucket: str = "templates"
+    supabase_db_backup_path: str = "_system/app.db"
 
     @property
     def frontend_origins(self) -> list[str]:

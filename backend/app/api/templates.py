@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 from sqlmodel import Session, delete, select
 
-from app.database import get_session
+from app.database import backup_database, get_session
 from app.models.generated_document import GeneratedDocument
 from app.models.template import Template, TemplatePage, now_utc
 from app.models.text_element import TemplateTextElement
@@ -37,9 +37,7 @@ def _template_detail(session: Session, template_id: str) -> TemplateDetailOut:
 def _delete_file(path_value: str | None) -> None:
     if not path_value:
         return
-    path = Path(path_value)
-    if path.exists() and path.is_file():
-        path.unlink()
+    StorageService().delete_file(Path(path_value))
 
 
 @router.post("/upload", response_model=TemplateDetailOut)
@@ -63,6 +61,7 @@ async def upload_template(file: UploadFile, session: Session = Depends(get_sessi
         page.template_id = template.id
         session.add(page)
     session.commit()
+    backup_database()
     return _template_detail(session, template.id)
 
 
@@ -82,7 +81,7 @@ def get_original_pdf(template_id: str, session: Session = Depends(get_session)) 
     if not template:
         raise HTTPException(status_code=404, detail="Template not found")
     path = Path(template.original_pdf_path)
-    if not path.exists():
+    if not StorageService().ensure_local_file(path):
         raise HTTPException(status_code=404, detail="Original PDF not found")
     return FileResponse(path, media_type="application/pdf", filename=template.original_filename)
 
@@ -99,6 +98,7 @@ def update_template(template_id: str, payload: TemplateUpdateIn, session: Sessio
     template.updated_at = now_utc()
     session.add(template)
     session.commit()
+    backup_database()
     return _template_detail(session, template_id)
 
 
@@ -119,6 +119,7 @@ def delete_template(template_id: str, session: Session = Depends(get_session)) -
     _delete_file(template.original_pdf_path)
     session.delete(template)
     session.commit()
+    backup_database()
 
 
 @router.put("/{template_id}/pages", response_model=TemplateDetailOut)
@@ -178,6 +179,7 @@ def update_pages(template_id: str, payload: TemplatePageLayoutIn, session: Sessi
     template.updated_at = now_utc()
     session.add(template)
     session.commit()
+    backup_database()
     return _template_detail(session, template_id)
 
 
@@ -246,4 +248,5 @@ def save_layout(template_id: str, payload: TemplateSaveLayoutIn, session: Sessio
     template.updated_at = now_utc()
     session.add(template)
     session.commit()
+    backup_database()
     return _template_detail(session, template_id)

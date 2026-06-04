@@ -4,11 +4,11 @@ Production-oriented local foundation for Canva-exported PDF templates. The uploa
 
 ## Architecture
 
-- `backend/` is a FastAPI service with SQLModel on SQLite, local file storage, PyMuPDF PDF inspection/rendering, and Pydantic request validation.
+- `backend/` is a FastAPI service with SQLModel on SQLite, Supabase-backed file/database backup, PyMuPDF PDF inspection/rendering, and Pydantic request validation.
 - `frontend/` is a Next.js TypeScript app with Tailwind CSS, `react-pdf` rendering, a visual text overlay editor, variable manager, and generation screens.
-- Uploaded originals are stored in `backend/storage/templates/originals`.
-- Generated PDFs and batch ZIPs are stored in `backend/storage/generated`.
-- The SQLite database lives at `backend/data/app.db` and is created automatically on startup.
+- Uploaded originals are stored locally under `backend/storage/templates/originals` and backed up to Supabase Storage in production.
+- Generated PDFs and batch ZIPs are stored locally under `backend/storage/generated` and backed up to Supabase Storage when generated for download.
+- The SQLite database lives at `backend/data/app.db`, is created automatically on startup, and can be restored from Supabase Storage.
 
 ## Data Flow
 
@@ -51,9 +51,10 @@ If the backend runs somewhere else, set `NEXT_PUBLIC_API_BASE`.
 - Deploy the frontend to Vercel with Root Directory set to `frontend`.
 - In Vercel, set `NEXT_PUBLIC_API_BASE` to the Render backend URL, for example `https://your-render-service.onrender.com`.
 - In Render, set `FRONTEND_ORIGIN` to the Vercel frontend URL.
+- In Render, set `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, and `SUPABASE_BUCKET=templates` so uploaded templates and SQLite metadata survive deploys.
 - To email certificates, deploy `docs/apps-script-certificate-mailer.gs` as a Google Apps Script Web App and set Render env `APPS_SCRIPT_WEBHOOK_URL` to that Web App URL.
 - Email-batch certificates are rendered in memory and sent to Apps Script immediately; they are not saved as generated files in backend storage.
-- Render's free filesystem is ephemeral. To keep uploaded templates and SQLite data after deploys, use a paid Render instance with a persistent disk mounted at `/var/data` and set `PERSISTENT_STORAGE_DIR=/var/data`.
+- Render's free filesystem is ephemeral, so production persistence is handled through Supabase Storage instead of Render disks.
 
 ## API Endpoints
 

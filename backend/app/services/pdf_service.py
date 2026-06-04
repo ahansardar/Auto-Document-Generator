@@ -12,6 +12,7 @@ from app.models.text_element import TemplateTextElement
 from app.models.variable import TemplateVariable
 from app.services.coordinate_service import browser_to_pdf_coords
 from app.services.font_service import font_file_for_family
+from app.database import backup_database
 from app.services.storage_service import StorageService
 from app.services.validation_service import validate_generation_data
 from app.utils.text_utils import replace_variables
@@ -177,6 +178,7 @@ def generate_pdf_from_template(session: Session, template_id: str, data: dict) -
     storage = StorageService()
     output_path = storage.generated_path(f"{template_id}-{uuid4()}.pdf")
     output_path.write_bytes(pdf_bytes)
+    storage.upload_existing_file(output_path, "application/pdf")
 
     generated = GeneratedDocument(
         template_id=template_id,
@@ -185,6 +187,7 @@ def generate_pdf_from_template(session: Session, template_id: str, data: dict) -
     )
     session.add(generated)
     session.commit()
+    backup_database()
     session.refresh(generated)
     return generated
 
