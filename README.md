@@ -53,6 +53,7 @@ If the backend runs somewhere else, set `NEXT_PUBLIC_API_BASE`.
 - In Render, set `FRONTEND_ORIGIN` to the Vercel frontend URL.
 - To email certificates, deploy `docs/apps-script-certificate-mailer.gs` as a Google Apps Script Web App and set Render env `APPS_SCRIPT_WEBHOOK_URL` to that Web App URL.
 - Email-batch certificates are rendered in memory and sent to Apps Script immediately; they are not saved as generated files in backend storage.
+- Render's free filesystem is ephemeral. To keep uploaded templates and SQLite data after deploys, use a paid Render instance with a persistent disk mounted at `/var/data` and set `PERSISTENT_STORAGE_DIR=/var/data`.
 
 ## API Endpoints
 

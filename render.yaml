@@ -2,16 +2,22 @@ services:
   - type: web
     name: auto-document-generator-backend
     runtime: python
-    plan: free
+    plan: starter
     rootDir: backend
     buildCommand: pip install -r app/requirements.txt
     startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
     healthCheckPath: /api/health
     autoDeploy: true
     envVars:
+      - key: PERSISTENT_STORAGE_DIR
+        value: /var/data
       - key: FRONTEND_ORIGIN
         value: https://auto-document-generator.vercel.app,https://auto-document-generator-zsep.vercel.app
       - key: PYTHON_VERSION
         value: 3.12.8
       - key: APPS_SCRIPT_WEBHOOK_URL
         sync: false
+    disk:
+      name: certificate-data
+      mountPath: /var/data
+      sizeGB: 1

@@ -11,6 +11,7 @@ class Settings(BaseSettings):
     max_upload_bytes: int = 25 * 1024 * 1024
     frontend_origin: str = "http://localhost:3000"
     apps_script_webhook_url: str | None = None
+    persistent_storage_dir: Path | None = None
 
     @property
     def frontend_origins(self) -> list[str]:
@@ -23,15 +24,23 @@ class Settings(BaseSettings):
 
     @property
     def originals_dir(self) -> Path:
-        return self.backend_dir / "storage" / "templates" / "originals"
+        return self.storage_root / "templates" / "originals"
 
     @property
     def generated_dir(self) -> Path:
-        return self.backend_dir / "storage" / "generated"
+        return self.storage_root / "generated"
 
     @property
     def data_dir(self) -> Path:
-        return self.backend_dir / "data"
+        return self.app_data_root / "data"
+
+    @property
+    def app_data_root(self) -> Path:
+        return self.persistent_storage_dir or self.backend_dir
+
+    @property
+    def storage_root(self) -> Path:
+        return self.app_data_root / "storage"
 
 
 @lru_cache
