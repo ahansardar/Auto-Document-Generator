@@ -73,6 +73,27 @@ function fillPreview(text: string | null | undefined, sample: Record<string, str
   return (text ?? "").replace(/{{\s*([\w.-]+)\s*}}/g, (_, key: string) => sample[key] ?? `{{${key}}}`);
 }
 
+function visualPreviewHtml(template: MailTemplate, sample: Record<string, string>) {
+  const button = template.button_text
+    ? `<div style="margin-top:20px"><span style="display:inline-block;border-radius:999px;background:${template.primary_color};color:#fff;padding:10px 16px;font-weight:700">${fillPreview(template.button_text, sample)}</span></div>`
+    : "";
+  const footer = template.footer ? `<p style="margin-top:24px;font-size:12px;opacity:.7;white-space:pre-wrap">${fillPreview(template.footer, sample)}</p>` : "";
+
+  return `<!doctype html>
+<html>
+  <body style="margin:0;background:${template.background_color};font-family:${template.font_family};color:${template.text_color};padding:24px">
+    <div style="max-width:640px;margin:0 auto;border-radius:24px;border:1px solid rgba(28,24,18,.14);background:${template.card_color};padding:28px">
+      <div style="font-size:12px;font-weight:700;letter-spacing:.18em;text-transform:uppercase;color:${template.primary_color}">${fillPreview(template.sender_name, sample) || "Certificate"}</div>
+      <h1 style="margin:14px 0 16px;font-size:30px;line-height:1.15">${fillPreview(template.title, sample)}</h1>
+      <p style="margin:0 0 12px;font-weight:700">${fillPreview(template.greeting, sample)}</p>
+      <div style="font-size:15px;line-height:1.75;white-space:pre-wrap">${fillPreview(template.body, sample)}</div>
+      ${button}
+      ${footer}
+    </div>
+  </body>
+</html>`;
+}
+
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <label className="grid gap-1 text-sm">
@@ -97,6 +118,18 @@ export function EmailBatchForm({ templateId, variables }: { templateId: string; 
   const [mailTemplate, setMailTemplate] = useState<MailTemplate>({
     email_column: emailLikeColumn ?? "email",
     name_column: nameLikeColumn ?? "participant_name",
+    html_mode: false,
+    custom_html: `<!doctype html>
+<html>
+  <body style="margin:0;background:#f6f0df;font-family:Arial,sans-serif;color:#1c1812;padding:32px">
+    <div style="max-width:640px;margin:auto;background:#fffaf0;border-radius:24px;padding:32px;border:1px solid rgba(28,24,18,.12)">
+      <p style="letter-spacing:.16em;text-transform:uppercase;font-weight:700;color:#1c1812">Certificate Team</p>
+      <h1>Congratulations, {{participant_name}}!</h1>
+      <p>Hi {{participant_name}},</p>
+      <p>Thank you for participating. Your certificate dated {{date}} is attached.</p>
+    </div>
+  </body>
+</html>`,
     subject: "Your certificate is ready, {{participant_name}}",
     preheader: "Your certificate PDF is attached.",
     title: "Congratulations, {{participant_name}}!",
@@ -115,6 +148,9 @@ export function EmailBatchForm({ templateId, variables }: { templateId: string; 
   });
   const selectedCount = selectedRows.size;
   const sampleRow = preview?.rows.find((_, index) => selectedRows.has(index)) ?? preview?.rows[0] ?? {};
+  const previewHtml = mailTemplate.html_mode
+    ? fillPreview(mailTemplate.custom_html, sampleRow)
+    : visualPreviewHtml(mailTemplate, sampleRow);
 
   const visibleColumns = useMemo(() => {
     const preferred = [mailTemplate.name_column, mailTemplate.email_column].filter(Boolean) as string[];
@@ -276,38 +312,79 @@ export function EmailBatchForm({ templateId, variables }: { templateId: string; 
             <h3 className="font-semibold">No-code email designer</h3>
             <p className="text-xs text-zinc-600">Use variables like {"{{participant_name}}"} anywhere. The live preview uses the first selected CSV row.</p>
           </div>
+          <div className="flex flex-col gap-2 rounded border border-line bg-white p-2 text-sm sm:flex-row">
+            <button
+              type="button"
+              className={`rounded px-3 py-2 font-medium ${!mailTemplate.html_mode ? "bg-ink text-white" : "text-ink"}`}
+              onClick={() => patchMailTemplate({ html_mode: false })}
+            >
+              Visual fields
+            </button>
+            <button
+              type="button"
+              className={`rounded px-3 py-2 font-medium ${mailTemplate.html_mode ? "bg-ink text-white" : "text-ink"}`}
+              onClick={() => patchMailTemplate({ html_mode: true })}
+            >
+              Paste HTML/CSS/JS
+            </button>
+          </div>
           <div className="grid gap-3 sm:grid-cols-2">
             <Field label="Sender display name"><input className="rounded border border-line px-3 py-2" value={mailTemplate.sender_name ?? ""} onChange={(event) => patchMailTemplate({ sender_name: event.target.value })} /></Field>
             <Field label="Reply-to email"><input className="rounded border border-line px-3 py-2" value={mailTemplate.reply_to ?? ""} onChange={(event) => patchMailTemplate({ reply_to: event.target.value })} /></Field>
             <Field label="Subject"><input className="rounded border border-line px-3 py-2" value={mailTemplate.subject} onChange={(event) => patchMailTemplate({ subject: event.target.value })} /></Field>
             <Field label="Attachment filename"><input className="rounded border border-line px-3 py-2" value={mailTemplate.attachment_filename} onChange={(event) => patchMailTemplate({ attachment_filename: event.target.value })} /></Field>
-            <Field label="Email title"><input className="rounded border border-line px-3 py-2" value={mailTemplate.title} onChange={(event) => patchMailTemplate({ title: event.target.value })} /></Field>
-            <Field label="Greeting"><input className="rounded border border-line px-3 py-2" value={mailTemplate.greeting} onChange={(event) => patchMailTemplate({ greeting: event.target.value })} /></Field>
           </div>
-          <Field label="Preheader"><input className="rounded border border-line px-3 py-2" value={mailTemplate.preheader ?? ""} onChange={(event) => patchMailTemplate({ preheader: event.target.value })} /></Field>
-          <Field label="Body message"><textarea className="min-h-32 rounded border border-line px-3 py-2" value={mailTemplate.body} onChange={(event) => patchMailTemplate({ body: event.target.value })} /></Field>
-          <div className="grid gap-3 sm:grid-cols-2">
-            <Field label="Button/label text"><input className="rounded border border-line px-3 py-2" value={mailTemplate.button_text ?? ""} onChange={(event) => patchMailTemplate({ button_text: event.target.value })} /></Field>
-            <Field label="Font family"><input className="rounded border border-line px-3 py-2" value={mailTemplate.font_family} onChange={(event) => patchMailTemplate({ font_family: event.target.value })} /></Field>
-          </div>
-          <Field label="Footer"><textarea className="min-h-20 rounded border border-line px-3 py-2" value={mailTemplate.footer ?? ""} onChange={(event) => patchMailTemplate({ footer: event.target.value })} /></Field>
-          <div className="grid gap-3 sm:grid-cols-4">
-            <Field label="Primary"><input className="h-10 rounded border border-line" type="color" value={mailTemplate.primary_color} onChange={(event) => patchMailTemplate({ primary_color: event.target.value })} /></Field>
-            <Field label="Background"><input className="h-10 rounded border border-line" type="color" value={mailTemplate.background_color} onChange={(event) => patchMailTemplate({ background_color: event.target.value })} /></Field>
-            <Field label="Card"><input className="h-10 rounded border border-line" type="color" value={mailTemplate.card_color} onChange={(event) => patchMailTemplate({ card_color: event.target.value })} /></Field>
-            <Field label="Text"><input className="h-10 rounded border border-line" type="color" value={mailTemplate.text_color} onChange={(event) => patchMailTemplate({ text_color: event.target.value })} /></Field>
-          </div>
+          {mailTemplate.html_mode ? (
+            <div className="grid gap-2">
+              <Field label="Custom email HTML">
+                <textarea
+                  className="min-h-80 rounded border border-line bg-white px-3 py-2 font-mono text-xs leading-6"
+                  spellCheck={false}
+                  value={mailTemplate.custom_html ?? ""}
+                  onChange={(event) => patchMailTemplate({ custom_html: event.target.value })}
+                />
+              </Field>
+              <p className="text-xs text-zinc-600">
+                CSS and script tags are kept in preview and sent to Apps Script. Most email clients, including Gmail, will strip or ignore JavaScript for security.
+              </p>
+            </div>
+          ) : (
+            <>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <Field label="Email title"><input className="rounded border border-line px-3 py-2" value={mailTemplate.title} onChange={(event) => patchMailTemplate({ title: event.target.value })} /></Field>
+                <Field label="Greeting"><input className="rounded border border-line px-3 py-2" value={mailTemplate.greeting} onChange={(event) => patchMailTemplate({ greeting: event.target.value })} /></Field>
+              </div>
+              <Field label="Preheader"><input className="rounded border border-line px-3 py-2" value={mailTemplate.preheader ?? ""} onChange={(event) => patchMailTemplate({ preheader: event.target.value })} /></Field>
+              <Field label="Body message"><textarea className="min-h-32 rounded border border-line px-3 py-2" value={mailTemplate.body} onChange={(event) => patchMailTemplate({ body: event.target.value })} /></Field>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <Field label="Button/label text"><input className="rounded border border-line px-3 py-2" value={mailTemplate.button_text ?? ""} onChange={(event) => patchMailTemplate({ button_text: event.target.value })} /></Field>
+                <Field label="Font family"><input className="rounded border border-line px-3 py-2" value={mailTemplate.font_family} onChange={(event) => patchMailTemplate({ font_family: event.target.value })} /></Field>
+              </div>
+              <Field label="Footer"><textarea className="min-h-20 rounded border border-line px-3 py-2" value={mailTemplate.footer ?? ""} onChange={(event) => patchMailTemplate({ footer: event.target.value })} /></Field>
+              <div className="grid gap-3 sm:grid-cols-4">
+                <Field label="Primary"><input className="h-10 rounded border border-line" type="color" value={mailTemplate.primary_color} onChange={(event) => patchMailTemplate({ primary_color: event.target.value })} /></Field>
+                <Field label="Background"><input className="h-10 rounded border border-line" type="color" value={mailTemplate.background_color} onChange={(event) => patchMailTemplate({ background_color: event.target.value })} /></Field>
+                <Field label="Card"><input className="h-10 rounded border border-line" type="color" value={mailTemplate.card_color} onChange={(event) => patchMailTemplate({ card_color: event.target.value })} /></Field>
+                <Field label="Text"><input className="h-10 rounded border border-line" type="color" value={mailTemplate.text_color} onChange={(event) => patchMailTemplate({ text_color: event.target.value })} /></Field>
+              </div>
+            </>
+          )}
         </div>
 
-        <div className="rounded border border-line p-4" style={{ background: mailTemplate.background_color }}>
-          <div className="mx-auto max-w-xl rounded-3xl border p-6" style={{ background: mailTemplate.card_color, color: mailTemplate.text_color, fontFamily: mailTemplate.font_family }}>
-            <div className="text-xs font-bold uppercase tracking-[0.2em]" style={{ color: mailTemplate.primary_color }}>{fillPreview(mailTemplate.sender_name, sampleRow) || "Certificate"}</div>
-            <h3 className="mt-3 text-2xl font-semibold">{fillPreview(mailTemplate.title, sampleRow)}</h3>
-            <p className="mt-4 font-semibold">{fillPreview(mailTemplate.greeting, sampleRow)}</p>
-            <p className="mt-3 whitespace-pre-wrap text-sm leading-7">{fillPreview(mailTemplate.body, sampleRow)}</p>
-            {mailTemplate.button_text ? <div className="mt-5 inline-flex rounded-full px-4 py-2 text-sm font-semibold text-white" style={{ background: mailTemplate.primary_color }}>{fillPreview(mailTemplate.button_text, sampleRow)}</div> : null}
-            {mailTemplate.footer ? <p className="mt-6 whitespace-pre-wrap text-xs opacity-70">{fillPreview(mailTemplate.footer, sampleRow)}</p> : null}
+        <div className="rounded border border-line bg-white p-4">
+          <div className="mb-3 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+            <div>
+              <h3 className="font-semibold">Email preview</h3>
+              <p className="text-xs text-zinc-600">Variables are replaced using the first selected CSV row.</p>
+            </div>
+            <span className="text-xs text-zinc-500">{mailTemplate.html_mode ? "Custom HTML mode" : "Visual mode"}</span>
           </div>
+          <iframe
+            title="Email preview"
+            className="h-[520px] w-full rounded border border-line bg-white"
+            sandbox="allow-scripts"
+            srcDoc={previewHtml}
+          />
         </div>
 
         <button className="rounded bg-ink px-4 py-2 font-medium text-white disabled:opacity-50" disabled={!preview || !selectedRows.size || busy} onClick={() => void submit()}>

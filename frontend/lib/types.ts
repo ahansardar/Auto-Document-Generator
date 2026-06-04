@@ -91,6 +91,8 @@ export type BatchResult = {
 export type MailTemplate = {
   email_column: string;
   name_column?: string | null;
+  html_mode?: boolean;
+  custom_html?: string | null;
   subject: string;
   preheader?: string | null;
   title: string;

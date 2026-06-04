@@ -24,6 +24,8 @@ class BatchGenerateResponse(BaseModel):
 class MailTemplateIn(BaseModel):
     email_column: str
     name_column: str | None = None
+    html_mode: bool = False
+    custom_html: str | None = None
     subject: str
     preheader: str | None = None
     title: str

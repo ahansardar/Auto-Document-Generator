@@ -18,6 +18,9 @@ def render_value(template: str | None, data: dict[str, str]) -> str:
 
 
 def render_mail_html(template: MailTemplateIn, data: dict[str, str]) -> str:
+    if template.html_mode and template.custom_html:
+        return render_value(template.custom_html, data)
+
     preheader = render_value(template.preheader, data)
     button_text = render_value(template.button_text, data)
     body = escape(render_value(template.body, data)).replace("\n", "<br />")
