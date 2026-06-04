@@ -2,8 +2,8 @@
 
 on:
   schedule:
-    # Stagger away from :00/:10/:20 load spikes; GitHub schedules are UTC and best-effort.
-    - cron: "3,13,23,33,43,53 * * * *"
+    # Stagger away from :00/:05 load spikes; GitHub schedules are UTC and best-effort.
+    - cron: "2,7,12,17,22,27,32,37,42,47,52,57 * * * *"
   workflow_dispatch:
 
 jobs:
