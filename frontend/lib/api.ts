@@ -1,6 +1,18 @@
 import type { BatchMailResult, BatchResult, EditorFont, MailTemplate, Template, TemplateDetail, TemplateVariable, TextElement } from "./types";
 
-export const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:8000";
+const LOCAL_API_BASE = "http://localhost:8000";
+const PRODUCTION_API_BASE = "https://auto-document-generator-backend.onrender.com";
+const DEPRECATED_API_BASES = new Set(["https://auto-document-generator-1-v454.onrender.com"]);
+
+function resolveApiBase() {
+  const configuredBase = process.env.NEXT_PUBLIC_API_BASE?.replace(/\/$/, "");
+  if (configuredBase && !DEPRECATED_API_BASES.has(configuredBase)) {
+    return configuredBase;
+  }
+  return process.env.NODE_ENV === "development" ? LOCAL_API_BASE : PRODUCTION_API_BASE;
+}
+
+export const API_BASE = resolveApiBase();
 
 export type UploadProgress = {
   loaded: number;
