@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { CheckSquare, Mail, Square } from "lucide-react";
 import { emailBatch } from "@/lib/api";
+import { ProgressBar } from "@/components/ui/ProgressBar";
 import type { BatchMailResult, MailTemplate, TemplateVariable } from "@/lib/types";
 
 type CsvPreview = {
@@ -88,6 +89,8 @@ export function EmailBatchForm({ templateId, variables }: { templateId: string; 
   const [result, setResult] = useState<BatchMailResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const [progressLabel, setProgressLabel] = useState("Preparing emails...");
   const manualColumns = variables.filter((variable) => !variable.generator_enabled).map((variable) => variable.name);
   const emailLikeColumn = manualColumns.find((column) => column.toLowerCase().includes("email"));
   const nameLikeColumn = manualColumns.find((column) => column.toLowerCase().includes("participant") || column.toLowerCase().includes("name"));
@@ -173,12 +176,26 @@ export function EmailBatchForm({ templateId, variables }: { templateId: string; 
     setBusy(true);
     setError(null);
     setResult(null);
+    setProgress(5);
+    setProgressLabel("Preparing selected recipients...");
+    let timer: number | null = null;
     try {
       const rowsToMail = preview.rows.filter((_, index) => selectedRows.has(index));
       const selectedCsv = createCsvFile(preview.headers, rowsToMail, file.name.replace(/\.csv$/i, "-mail-selected.csv"));
-      setResult(await emailBatch(templateId, selectedCsv, mailTemplate));
+      setResult(await emailBatch(templateId, selectedCsv, mailTemplate, ({ percent }) => {
+        setProgress(Math.min(30, Math.max(5, Math.round(percent * 0.3))));
+        setProgressLabel(percent >= 100 ? `Generating and mailing ${rowsToMail.length} certificates...` : "Uploading mail CSV...");
+        if (percent >= 100 && !timer) {
+          timer = window.setInterval(() => setProgress((current) => Math.min(94, current + 2)), 650);
+        }
+      }));
+      if (timer) window.clearInterval(timer);
+      setProgress(100);
+      setProgressLabel("Mailing complete.");
     } catch (err) {
+      if (timer) window.clearInterval(timer);
       setError(err instanceof Error ? err.message : "Could not send certificates");
+      setProgress(0);
     } finally {
       setBusy(false);
     }
@@ -296,6 +313,9 @@ export function EmailBatchForm({ templateId, variables }: { templateId: string; 
         <button className="rounded bg-ink px-4 py-2 font-medium text-white disabled:opacity-50" disabled={!preview || !selectedRows.size || busy} onClick={() => void submit()}>
           {busy ? "Sending..." : `Generate and Email ${selectedCount || "selected"} Certificates`}
         </button>
+        {busy || progress === 100 ? (
+          <ProgressBar value={progress} label={progressLabel} detail="Certificates are generated, attached, and sent through your Apps Script webhook." />
+        ) : null}
         {error ? <div className="text-sm text-red-600">{error}</div> : null}
         {result ? (
           <div className="rounded border border-line bg-canvas p-3 text-sm">

@@ -2,6 +2,12 @@ import type { BatchMailResult, BatchResult, EditorFont, MailTemplate, Template, 
 
 export const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:8000";
 
+export type UploadProgress = {
+  loaded: number;
+  total: number;
+  percent: number;
+};
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`${API_BASE}${path}`, init);
   if (!response.ok) {
@@ -13,6 +19,45 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     return undefined as T;
   }
   return response.json() as Promise<T>;
+}
+
+function requestWithUploadProgress<T>(path: string, body: FormData, onProgress?: (progress: UploadProgress) => void): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+
+    xhr.open("POST", `${API_BASE}${path}`);
+    xhr.responseType = "text";
+
+    xhr.upload.onprogress = (event) => {
+      if (!event.lengthComputable) return;
+      onProgress?.({
+        loaded: event.loaded,
+        total: event.total,
+        percent: Math.round((event.loaded / event.total) * 100)
+      });
+    };
+
+    xhr.onerror = () => reject(new Error("Network request failed"));
+    xhr.onload = () => {
+      let payload: any;
+      try {
+        payload = xhr.responseText ? JSON.parse(xhr.responseText) : undefined;
+      } catch {
+        payload = undefined;
+      }
+
+      if (xhr.status < 200 || xhr.status >= 300) {
+        const detail = payload?.detail ?? xhr.statusText;
+        const message = Array.isArray(detail) ? detail.join(", ") : detail;
+        reject(new Error(message || "Request failed"));
+        return;
+      }
+
+      resolve(payload as T);
+    };
+
+    xhr.send(body);
+  });
 }
 
 export function originalPdfUrl(templateId: string) {
@@ -39,10 +84,10 @@ export function getEditorFonts() {
   return request<EditorFont[]>("/api/editor/fonts");
 }
 
-export async function uploadTemplate(file: File) {
+export async function uploadTemplate(file: File, onProgress?: (progress: UploadProgress) => void) {
   const form = new FormData();
   form.append("file", file);
-  return request<TemplateDetail>("/api/templates/upload", { method: "POST", body: form });
+  return requestWithUploadProgress<TemplateDetail>("/api/templates/upload", form, onProgress);
 }
 
 export function saveLayout(id: string, payload: { name: string; text_elements: TextElement[]; variables: TemplateVariable[] }) {
@@ -69,15 +114,15 @@ export function generateOne(id: string, data: Record<string, string>) {
   });
 }
 
-export async function generateBatch(id: string, file: File) {
+export async function generateBatch(id: string, file: File, onProgress?: (progress: UploadProgress) => void) {
   const form = new FormData();
   form.append("file", file);
-  return request<BatchResult>(`/api/templates/${id}/generate-batch`, { method: "POST", body: form });
+  return requestWithUploadProgress<BatchResult>(`/api/templates/${id}/generate-batch`, form, onProgress);
 }
 
-export async function emailBatch(id: string, file: File, mailTemplate: MailTemplate) {
+export async function emailBatch(id: string, file: File, mailTemplate: MailTemplate, onProgress?: (progress: UploadProgress) => void) {
   const form = new FormData();
   form.append("file", file);
   form.append("mail_template_json", JSON.stringify(mailTemplate));
-  return request<BatchMailResult>(`/api/templates/${id}/email-batch`, { method: "POST", body: form });
+  return requestWithUploadProgress<BatchMailResult>(`/api/templates/${id}/email-batch`, form, onProgress);
 }

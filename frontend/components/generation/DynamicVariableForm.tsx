@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { downloadUrl, generateOne } from "@/lib/api";
 import { generateFromPattern } from "@/lib/patterns";
+import { ProgressBar } from "@/components/ui/ProgressBar";
 import type { TemplateVariable } from "@/lib/types";
 
 export function DynamicVariableForm({ templateId, variables }: { templateId: string; variables: TemplateVariable[] }) {
@@ -10,15 +11,29 @@ export function DynamicVariableForm({ templateId, variables }: { templateId: str
   const [download, setDownload] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const [progressLabel, setProgressLabel] = useState("Preparing PDF...");
 
   async function submit() {
     setBusy(true);
     setError(null);
+    setDownload(null);
+    setProgress(8);
+    setProgressLabel("Preparing certificate data...");
+    const timer = window.setInterval(() => {
+      setProgress((current) => Math.min(92, current + 3));
+      setProgressLabel("Rendering PDF...");
+    }, 450);
     try {
       const result = await generateOne(templateId, values);
+      window.clearInterval(timer);
+      setProgress(100);
+      setProgressLabel("PDF generated.");
       setDownload(downloadUrl(result.download_url));
     } catch (err) {
+      window.clearInterval(timer);
       setError(err instanceof Error ? err.message : "Generation failed");
+      setProgress(0);
     } finally {
       setBusy(false);
     }
@@ -60,6 +75,7 @@ export function DynamicVariableForm({ templateId, variables }: { templateId: str
         <button className="rounded bg-ink px-4 py-2 font-medium text-white" onClick={() => void submit()} disabled={busy}>
           {busy ? "Generating..." : "Generate PDF"}
         </button>
+        {busy || progress === 100 ? <ProgressBar value={progress} label={progressLabel} detail="The PDF is generated from the current template and variable values." /> : null}
         {error ? <div className="text-sm text-red-600">{error}</div> : null}
         {download ? <a className="text-sm font-medium underline" href={download}>Download generated PDF</a> : null}
       </div>

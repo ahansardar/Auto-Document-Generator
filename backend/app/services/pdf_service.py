@@ -126,13 +126,13 @@ def draw_text_element(page: fitz.Page, element: TemplateTextElement, data: dict[
     )
 
 
-def render_pdf_bytes_from_template(session: Session, template_id: str, data: dict) -> tuple[bytes, dict[str, str]]:
+def render_pdf_bytes_from_template(session: Session, template_id: str, data: dict, preserve_extra_fields: bool = False) -> tuple[bytes, dict[str, str]]:
     template = session.get(Template, template_id)
     if not template:
         raise HTTPException(status_code=404, detail="Template not found")
 
     variables = session.exec(select(TemplateVariable).where(TemplateVariable.template_id == template_id)).all()
-    generation_data = validate_generation_data(list(variables), data)
+    generation_data = validate_generation_data(list(variables), data, preserve_extra_fields=preserve_extra_fields)
     elements = session.exec(
         select(TemplateTextElement)
         .where(TemplateTextElement.template_id == template_id)

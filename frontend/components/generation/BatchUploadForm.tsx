@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { CheckSquare, Square } from "lucide-react";
 import { downloadUrl, generateBatch } from "@/lib/api";
+import { ProgressBar } from "@/components/ui/ProgressBar";
 import type { BatchResult, TemplateVariable } from "@/lib/types";
 
 type CsvPreview = {
@@ -77,6 +78,8 @@ export function BatchUploadForm({ templateId, variables }: { templateId: string;
   const [result, setResult] = useState<BatchResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const [progressLabel, setProgressLabel] = useState("Preparing CSV...");
   const manualColumns = variables.filter((variable) => !variable.generator_enabled).map((variable) => variable.name);
   const generatedColumns = variables.filter((variable) => variable.generator_enabled).map((variable) => variable.name);
   const displayColumn = useMemo(() => {
@@ -141,12 +144,27 @@ export function BatchUploadForm({ templateId, variables }: { templateId: string;
 
     setBusy(true);
     setError(null);
+    setResult(null);
+    setProgress(5);
+    setProgressLabel("Preparing selected recipients...");
+    let timer: number | null = null;
     try {
       const rowsToGenerate = preview.rows.filter((_, index) => selectedRows.has(index));
       const selectedCsv = createCsvFile(preview.headers, rowsToGenerate, file.name.replace(/\.csv$/i, "-selected.csv"));
-      setResult(await generateBatch(templateId, selectedCsv));
+      setResult(await generateBatch(templateId, selectedCsv, ({ percent }) => {
+        setProgress(Math.min(35, Math.max(5, Math.round(percent * 0.35))));
+        setProgressLabel(percent >= 100 ? `Generating ${rowsToGenerate.length} PDFs...` : "Uploading selected CSV...");
+        if (percent >= 100 && !timer) {
+          timer = window.setInterval(() => setProgress((current) => Math.min(92, current + 2)), 500);
+        }
+      }));
+      if (timer) window.clearInterval(timer);
+      setProgress(100);
+      setProgressLabel("Batch PDFs ready.");
     } catch (err) {
+      if (timer) window.clearInterval(timer);
       setError(err instanceof Error ? err.message : "Batch generation failed");
+      setProgress(0);
     } finally {
       setBusy(false);
     }
@@ -225,6 +243,9 @@ export function BatchUploadForm({ templateId, variables }: { templateId: string;
         <button className="rounded bg-ink px-4 py-2 font-medium text-white disabled:opacity-50" disabled={!preview || !selectedRows.size || busy} onClick={() => void submit()}>
           {busy ? "Generating..." : `Generate ${selectedCount || "selected"} Certificates`}
         </button>
+        {busy || progress === 100 ? (
+          <ProgressBar value={progress} label={progressLabel} detail={`${selectedCount || 0} selected recipient${selectedCount === 1 ? "" : "s"} in this batch.`} />
+        ) : null}
         {error ? <div className="text-sm text-red-600">{error}</div> : null}
         {result ? (
           <div className="grid gap-2 text-sm">

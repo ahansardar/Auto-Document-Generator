@@ -4,9 +4,9 @@ from app.models.variable import TemplateVariable
 from app.services.random_service import generate_from_pattern
 
 
-def validate_generation_data(variables: list[TemplateVariable], data: dict) -> dict[str, str]:
+def validate_generation_data(variables: list[TemplateVariable], data: dict, preserve_extra_fields: bool = False) -> dict[str, str]:
     errors: list[str] = []
-    merged: dict[str, str] = {}
+    merged: dict[str, str] = {str(key): "" if value is None else str(value) for key, value in data.items()} if preserve_extra_fields else {}
     for variable in variables:
         value = data.get(variable.name, variable.default_value)
         if (value is None or str(value).strip() == "") and variable.generator_enabled:
@@ -32,7 +32,12 @@ def validate_batch_rows(variables: list[TemplateVariable], rows: list[dict]) -> 
     return valid_rows, errors
 
 
-def validate_batch_upload_schema(variables: list[TemplateVariable], rows: list[dict], allowed_extra_columns: set[str] | None = None) -> None:
+def validate_batch_upload_schema(
+    variables: list[TemplateVariable],
+    rows: list[dict],
+    allowed_extra_columns: set[str] | None = None,
+    allow_unknown_columns: bool = False,
+) -> None:
     if not rows:
         raise HTTPException(status_code=422, detail="Batch file must contain at least one data row")
 
@@ -57,10 +62,12 @@ def validate_batch_upload_schema(variables: list[TemplateVariable], rows: list[d
         errors.append(f"Missing columns: {', '.join(missing_columns)}")
     if generated_supplied:
         errors.append(f"Remove auto-generated columns: {', '.join(generated_supplied)}")
-    if unknown_columns:
+    if unknown_columns and not allow_unknown_columns:
         errors.append(f"Unknown columns: {', '.join(unknown_columns)}")
 
     if errors:
         expected_columns_with_extras = sorted(expected_columns | allowed_columns)
         expected = ", ".join(expected_columns_with_extras) or "no manual columns"
+        if allow_unknown_columns:
+            expected = f"{expected} plus optional mail/context columns"
         raise HTTPException(status_code=422, detail=[*errors, f"Expected CSV columns: {expected}"])

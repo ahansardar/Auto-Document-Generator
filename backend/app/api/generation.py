@@ -78,13 +78,18 @@ async def email_batch(
         raise HTTPException(status_code=400, detail="Email batch requires a CSV file")
 
     variables = list(session.exec(select(TemplateVariable).where(TemplateVariable.template_id == template_id)).all())
-    validate_batch_upload_schema(variables, rows, allowed_extra_columns={mail_template.email_column})
+    validate_batch_upload_schema(
+        variables,
+        rows,
+        allowed_extra_columns={mail_template.email_column},
+        allow_unknown_columns=True,
+    )
     valid_rows, errors = validate_batch_rows(variables, rows)
 
     sent = 0
     for index, row in enumerate(valid_rows, start=1):
         try:
-            pdf_bytes, generation_data = render_pdf_bytes_from_template(session, template_id, row)
+            pdf_bytes, generation_data = render_pdf_bytes_from_template(session, template_id, row, preserve_extra_fields=True)
             send_certificate_email(mail_template, generation_data, pdf_bytes)
             sent += 1
         except Exception as exc:
