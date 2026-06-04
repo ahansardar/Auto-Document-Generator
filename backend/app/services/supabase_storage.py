@@ -43,7 +43,11 @@ def upload_bytes(object_path: str, content: bytes, content_type: str = "applicat
             return
     except HTTPError as exc:
         if exc.code != 409:
-            raise
+            print(f"Supabase upload skipped for {object_path}: HTTP {exc.code}")
+            return
+    except Exception as exc:
+        print(f"Supabase upload skipped for {object_path}: {exc}")
+        return
 
     put_request = Request(
         object_url(object_path),
@@ -51,8 +55,11 @@ def upload_bytes(object_path: str, content: bytes, content_type: str = "applicat
         headers=auth_headers(content_type),
         method="PUT",
     )
-    with urlopen(put_request, timeout=30):
-        return
+    try:
+        with urlopen(put_request, timeout=30):
+            return
+    except Exception as exc:
+        print(f"Supabase upload skipped for {object_path}: {exc}")
 
 
 def download_bytes(object_path: str) -> bytes | None:
@@ -64,9 +71,11 @@ def download_bytes(object_path: str) -> bytes | None:
         with urlopen(request, timeout=30) as response:
             return response.read()
     except HTTPError as exc:
-        if exc.code == 404:
-            return None
-        raise
+        print(f"Supabase download skipped for {object_path}: HTTP {exc.code}")
+        return None
+    except Exception as exc:
+        print(f"Supabase download skipped for {object_path}: {exc}")
+        return None
 
 
 def delete_object(object_path: str) -> None:
@@ -78,7 +87,9 @@ def delete_object(object_path: str) -> None:
             return
     except HTTPError as exc:
         if exc.code != 404:
-            raise
+            print(f"Supabase delete skipped for {object_path}: HTTP {exc.code}")
+    except Exception as exc:
+        print(f"Supabase delete skipped for {object_path}: {exc}")
 
 
 def restore_file(object_path: str, destination: Path) -> bool:
