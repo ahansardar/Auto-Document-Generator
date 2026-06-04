@@ -41,8 +41,10 @@ async def generate_batch(template_id: str, file: UploadFile = File(...), session
     validate_batch_upload_schema(variables, rows)
     valid_rows, errors = validate_batch_rows(variables, rows)
     generated = generate_batch_from_template(session, template_id, valid_rows)
-    files = [Path(document.generated_pdf_path) for document in generated]
-    zip_path = StorageService().create_zip_from_generated_pdfs(files, f"{template_id}-batch-{uuid4()}.zip")
+    zip_path = StorageService().create_zip_from_generated_refs(
+        [document.generated_pdf_path for document in generated],
+        f"{template_id}-batch-{uuid4()}.zip",
+    )
 
     return BatchGenerateResponse(
         zip_download_url=f"/api/generated/download-file/{zip_path.name}",
@@ -101,8 +103,8 @@ def download_generated(document_id: str, session: Session = Depends(get_session)
     document = session.get(GeneratedDocument, document_id)
     if not document:
         raise HTTPException(status_code=404, detail="Generated PDF not found")
-    path = Path(document.generated_pdf_path)
-    if not StorageService().ensure_local_file(path):
+    path = StorageService().ensure_local_file(document.generated_pdf_path)
+    if not path:
         raise HTTPException(status_code=404, detail="Generated PDF not found")
     return FileResponse(path, media_type="application/pdf", filename=f"{document_id}.pdf")
 

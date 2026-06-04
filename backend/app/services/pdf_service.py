@@ -12,7 +12,6 @@ from app.models.text_element import TemplateTextElement
 from app.models.variable import TemplateVariable
 from app.services.coordinate_service import browser_to_pdf_coords
 from app.services.font_service import font_file_for_family
-from app.database import backup_database
 from app.services.storage_service import StorageService
 from app.services.validation_service import validate_generation_data
 from app.utils.text_utils import replace_variables
@@ -140,8 +139,9 @@ def render_pdf_bytes_from_template(session: Session, template_id: str, data: dic
         .order_by(TemplateTextElement.page_number, TemplateTextElement.z_index)
     ).all()
 
-    original_path = Path(template.original_pdf_path)
-    if not original_path.exists():
+    storage = StorageService()
+    original_path = storage.ensure_local_file(template.original_pdf_path)
+    if not original_path:
         raise HTTPException(status_code=404, detail="Original template PDF is missing from storage")
 
     source_document = fitz.open(original_path)
@@ -175,19 +175,17 @@ def render_pdf_bytes_from_template(session: Session, template_id: str, data: dic
 def generate_pdf_from_template(session: Session, template_id: str, data: dict) -> GeneratedDocument:
     pdf_bytes, generation_data = render_pdf_bytes_from_template(session, template_id, data)
 
-    storage = StorageService()
     output_path = storage.generated_path(f"{template_id}-{uuid4()}.pdf")
     output_path.write_bytes(pdf_bytes)
-    storage.upload_existing_file(output_path, "application/pdf")
+    generated_ref = storage.upload_existing_file_ref(output_path, "application/pdf")
 
     generated = GeneratedDocument(
         template_id=template_id,
         data_json=json.dumps(generation_data),
-        generated_pdf_path=str(output_path),
+        generated_pdf_path=generated_ref,
     )
     session.add(generated)
     session.commit()
-    backup_database()
     session.refresh(generated)
     return generated
 

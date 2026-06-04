@@ -11,6 +11,8 @@ services:
     envVars:
       - key: FRONTEND_ORIGIN
         value: https://auto-document-generator.vercel.app,https://auto-document-generator-zsep.vercel.app
+      - key: DATABASE_URL
+        sync: false
       - key: PYTHON_VERSION
         value: 3.12.8
       - key: APPS_SCRIPT_WEBHOOK_URL

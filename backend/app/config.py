@@ -16,7 +16,6 @@ class Settings(BaseSettings):
     supabase_url: str | None = None
     supabase_service_role_key: str | None = None
     supabase_bucket: str = "templates"
-    supabase_db_backup_path: str = "system/app.db"
 
     @property
     def frontend_origins(self) -> list[str]:
