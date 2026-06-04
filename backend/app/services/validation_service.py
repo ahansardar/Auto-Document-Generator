@@ -32,7 +32,7 @@ def validate_batch_rows(variables: list[TemplateVariable], rows: list[dict]) -> 
     return valid_rows, errors
 
 
-def validate_batch_upload_schema(variables: list[TemplateVariable], rows: list[dict]) -> None:
+def validate_batch_upload_schema(variables: list[TemplateVariable], rows: list[dict], allowed_extra_columns: set[str] | None = None) -> None:
     if not rows:
         raise HTTPException(status_code=422, detail="Batch file must contain at least one data row")
 
@@ -44,10 +44,11 @@ def validate_batch_upload_schema(variables: list[TemplateVariable], rows: list[d
     }
     expected_columns = {variable.name for variable in variables if not variable.generator_enabled}
     generated_columns = {variable.name for variable in variables if variable.generator_enabled}
+    allowed_columns = {column.strip() for column in (allowed_extra_columns or set()) if column.strip()}
 
     missing_columns = sorted(expected_columns - supplied_columns)
     generated_supplied = sorted(generated_columns & supplied_columns)
-    unknown_columns = sorted(supplied_columns - expected_columns - generated_columns)
+    unknown_columns = sorted(supplied_columns - expected_columns - generated_columns - allowed_columns)
 
     errors: list[str] = []
     if any(None in row for row in rows):
@@ -60,5 +61,6 @@ def validate_batch_upload_schema(variables: list[TemplateVariable], rows: list[d
         errors.append(f"Unknown columns: {', '.join(unknown_columns)}")
 
     if errors:
-        expected = ", ".join(sorted(expected_columns)) or "no manual columns"
+        expected_columns_with_extras = sorted(expected_columns | allowed_columns)
+        expected = ", ".join(expected_columns_with_extras) or "no manual columns"
         raise HTTPException(status_code=422, detail=[*errors, f"Expected CSV columns: {expected}"])

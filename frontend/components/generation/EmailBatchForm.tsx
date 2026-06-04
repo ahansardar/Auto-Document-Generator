@@ -198,6 +198,9 @@ export function EmailBatchForm({ templateId, variables }: { templateId: string; 
         <Field label="Recipient CSV">
           <input className="rounded border border-line px-3 py-2" type="file" accept=".csv,text/csv" onChange={(event) => void handleFileChange(event.target.files?.[0] ?? null)} />
         </Field>
+        <div className="rounded border border-line bg-canvas p-3 text-xs text-zinc-600">
+          Include certificate variables like <span className="font-medium text-ink">{manualColumns.join(", ") || "your template fields"}</span> plus one email column such as <span className="font-medium text-ink">email</span>. The email column is only used for sending and is not printed on the certificate unless you add it as a template variable.
+        </div>
 
         {preview ? (
           <div className="grid gap-3 rounded border border-line p-3">

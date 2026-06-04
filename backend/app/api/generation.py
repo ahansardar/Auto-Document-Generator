@@ -70,13 +70,14 @@ async def email_batch(
     except Exception as exc:
         raise HTTPException(status_code=400, detail="Invalid mail template settings") from exc
 
-    variables = list(session.exec(select(TemplateVariable).where(TemplateVariable.template_id == template_id)).all())
-    validate_batch_upload_schema(variables, rows)
-    valid_rows, errors = validate_batch_rows(variables, rows)
     if rows and mail_template.email_column not in rows[0]:
         raise HTTPException(status_code=422, detail=f"Email column not found: {mail_template.email_column}")
     if filename and not filename.endswith(".csv"):
         raise HTTPException(status_code=400, detail="Email batch requires a CSV file")
+
+    variables = list(session.exec(select(TemplateVariable).where(TemplateVariable.template_id == template_id)).all())
+    validate_batch_upload_schema(variables, rows, allowed_extra_columns={mail_template.email_column})
+    valid_rows, errors = validate_batch_rows(variables, rows)
 
     sent = 0
     for index, row in enumerate(valid_rows, start=1):
