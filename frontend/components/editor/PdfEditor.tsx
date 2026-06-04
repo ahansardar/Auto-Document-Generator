@@ -41,7 +41,11 @@ function newTextElement(pageNumber: number, zIndex: number, fieldName: string): 
   return {
     id: crypto.randomUUID(),
     page_number: pageNumber,
+    element_type: "text",
     content: `{{${fieldName}}}`,
+    image_src: null,
+    image_alt: null,
+    hyperlink_url: "",
     x: 120,
     y: 120,
     width: 260,
@@ -76,6 +80,67 @@ function newTextElement(pageNumber: number, zIndex: number, fieldName: string): 
     z_index: zIndex,
     locked: false,
     auto_shrink: false,
+    clip_overflow: true
+  };
+}
+
+function normalizeElement(element: TextElement): TextElement {
+  return {
+    ...element,
+    element_type: element.element_type ?? "text",
+    image_src: element.image_src ?? null,
+    image_alt: element.image_alt ?? null,
+    hyperlink_url: element.hyperlink_url ?? ""
+  };
+}
+
+function newButtonElement(pageNumber: number, zIndex: number): TextElement {
+  return {
+    ...newTextElement(pageNumber, zIndex, "button_label"),
+    element_type: "button",
+    content: "Open link",
+    x: 160,
+    y: 160,
+    width: 180,
+    height: 48,
+    font_size: 18,
+    is_bold: true,
+    text_color: "#ffffff",
+    background_color: "#1c1812",
+    background_opacity: 1,
+    border_width: 0,
+    border_radius: 999,
+    padding_top: 12,
+    padding_right: 16,
+    padding_bottom: 8,
+    padding_left: 16,
+    hyperlink_url: "https://example.com"
+  };
+}
+
+function imageFileToDataUrl(file: File) {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result));
+    reader.onerror = () => reject(new Error("Could not read image file"));
+    reader.readAsDataURL(file);
+  });
+}
+
+function newImageElement(pageNumber: number, zIndex: number, imageSrc: string, imageAlt: string): TextElement {
+  return {
+    ...newTextElement(pageNumber, zIndex, "image_caption"),
+    element_type: "image",
+    content: "",
+    image_src: imageSrc,
+    image_alt: imageAlt,
+    x: 120,
+    y: 120,
+    width: 180,
+    height: 120,
+    background_color: null,
+    background_opacity: 0,
+    border_width: 0,
     clip_overflow: true
   };
 }
@@ -121,7 +186,7 @@ export function PdfEditor({ templateId }: { templateId: string }) {
     getTemplate(templateId)
       .then((data) => {
         setTemplate(data);
-        setElements(data.text_elements);
+        setElements(data.text_elements.map(normalizeElement));
         setVariables(mergeDetectedVariables(data.variables, data.text_elements));
         setPast([]);
         setFuture([]);
@@ -243,6 +308,31 @@ export function PdfEditor({ templateId }: { templateId: string }) {
     setSelectedId(element.id);
   }
 
+  function addButton() {
+    if (!template) return;
+    pushHistory();
+    const element = newButtonElement(currentPage, elements.length + 1);
+    setElements((current) => [...current, element]);
+    setSelectedId(element.id);
+  }
+
+  async function addImage(file: File | null) {
+    if (!template || !file) return;
+    if (!file.type.startsWith("image/")) {
+      setError("Choose a PNG, JPG, or other image file.");
+      return;
+    }
+    pushHistory();
+    try {
+      const imageSrc = await imageFileToDataUrl(file);
+      const element = newImageElement(currentPage, elements.length + 1, imageSrc, file.name);
+      setElements((current) => [...current, element]);
+      setSelectedId(element.id);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not add image");
+    }
+  }
+
   function nextFieldName() {
     const names = new Set(variables.map((variable) => variable.name));
     let index = variables.length + 1;
@@ -270,7 +360,7 @@ export function PdfEditor({ templateId }: { templateId: string }) {
     try {
       const saved = await saveLayout(template.id, { name: template.name, text_elements: elements, variables });
       setTemplate(saved);
-      setElements(saved.text_elements);
+      setElements(saved.text_elements.map(normalizeElement));
       setVariables(mergeDetectedVariables(saved.variables, saved.text_elements));
       setPast([]);
       setFuture([]);
@@ -288,7 +378,7 @@ export function PdfEditor({ templateId }: { templateId: string }) {
     try {
       const saved = await updatePageLayout(template.id, nextPages.map((page) => page.source_page_number));
       setTemplate(saved);
-      setElements(saved.text_elements);
+      setElements(saved.text_elements.map(normalizeElement));
       setVariables(mergeDetectedVariables(saved.variables, saved.text_elements));
       const preferredPage = saved.pages.find((item) => item.page_number === currentPage) ?? saved.pages[0];
       setCurrentPage(preferredPage?.page_number ?? 1);
@@ -327,6 +417,19 @@ export function PdfEditor({ templateId }: { templateId: string }) {
 
   function renameSelectedVariable(rawName: string) {
     if (!selected) return;
+    if (!rawName.trim()) {
+      const oldName = firstVariableName(selected.content);
+      if (!oldName) return;
+      pushHistory();
+      const content = selected.content.replaceAll(`{{${oldName}}}`, oldName.replaceAll("_", " "));
+      updateElement({ ...selected, content }, false);
+      setVariables((current) => {
+        const nextElements = elements.map((element) => (element.id === selected.id ? { ...element, content } : element));
+        const usedNames = new Set(extractVariablesFromElements(nextElements));
+        return current.filter((variable) => usedNames.has(variable.name));
+      });
+      return;
+    }
     const newName = normalizeVariableName(rawName);
     const oldName = firstVariableName(selected.content);
     if (oldName === newName) return;
@@ -371,6 +474,8 @@ export function PdfEditor({ templateId }: { templateId: string }) {
         onNameChange={(name) => setTemplate({ ...template, name })}
         onZoomChange={setZoom}
         onAddText={addText}
+        onAddButton={addButton}
+        onAddImage={(file) => void addImage(file)}
         onSave={() => void handleSave()}
         onUndo={undo}
         onRedo={redo}

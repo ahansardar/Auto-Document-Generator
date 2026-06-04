@@ -5,8 +5,8 @@ export function extractVariablesFromText(content: string) {
   return Array.from(new Set(Array.from(content.matchAll(variableToken), (match) => match[1]))).sort();
 }
 
-export function extractVariablesFromElements(elements: { content: string }[]) {
-  return Array.from(new Set(elements.flatMap((element) => extractVariablesFromText(element.content)))).sort();
+export function extractVariablesFromElements(elements: { content: string; hyperlink_url?: string | null }[]) {
+  return Array.from(new Set(elements.flatMap((element) => [...extractVariablesFromText(element.content), ...extractVariablesFromText(element.hyperlink_url ?? "")]))).sort();
 }
 
 export function replaceVariables(content: string, data: Record<string, string>) {

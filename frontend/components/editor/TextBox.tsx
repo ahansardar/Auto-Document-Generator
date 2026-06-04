@@ -76,6 +76,24 @@ export function TextBox({ element, scale, selected, preview, sampleData, onSelec
   }
 
   const displayText = preview ? replaceVariables(element.content, sampleData) : element.content;
+  const displayLink = preview ? replaceVariables(element.hyperlink_url ?? "", sampleData) : element.hyperlink_url ?? "";
+  const isImage = element.element_type === "image";
+  const isButton = element.element_type === "button";
+  const backgroundColor = element.background_color && element.background_opacity > 0 ? hexToRgba(element.background_color, element.background_opacity) : "transparent";
+  const content = isImage ? (
+    element.image_src ? (
+      <img className="h-full w-full select-none object-fill" src={element.image_src} alt={element.image_alt ?? ""} draggable={false} style={{ opacity: element.text_opacity }} />
+    ) : (
+      <div className="flex h-full w-full items-center justify-center text-xs text-zinc-500">No image</div>
+    )
+  ) : (
+    <span>{displayText}</span>
+  );
+  const renderedContent = preview && displayLink ? (
+    <a className="block h-full w-full text-inherit no-underline" href={normalizeHref(displayLink)} target="_blank" rel="noreferrer" onClick={(event) => event.stopPropagation()}>
+      {content}
+    </a>
+  ) : content;
 
   return (
     <div
@@ -83,7 +101,7 @@ export function TextBox({ element, scale, selected, preview, sampleData, onSelec
       tabIndex={0}
       onPointerDown={startDrag}
       onClick={onSelect}
-      className={`pointer-events-auto absolute cursor-move select-none touch-none whitespace-pre-wrap ${selected && !preview ? "outline outline-2 outline-blue-500" : "outline-none"}`}
+      className={`pointer-events-auto absolute cursor-move select-none touch-none whitespace-pre-wrap ${isButton ? "flex items-center justify-center" : ""} ${selected && !preview ? "outline outline-2 outline-blue-500" : "outline-none"}`}
       style={{
         left,
         top,
@@ -94,7 +112,7 @@ export function TextBox({ element, scale, selected, preview, sampleData, onSelec
         paddingRight: element.padding_right * scale,
         paddingBottom: element.padding_bottom * scale,
         paddingLeft: element.padding_left * scale,
-        backgroundColor: element.background_color ?? "transparent",
+        backgroundColor,
         opacity: element.text_opacity,
         color: element.text_color,
         fontFamily: element.font_family,
@@ -114,7 +132,7 @@ export function TextBox({ element, scale, selected, preview, sampleData, onSelec
         transformOrigin: "center"
       }}
     >
-      {displayText}
+      {renderedContent}
       {selected && !preview ? (
         <>
           <div className="absolute -top-9 left-0 flex gap-1 rounded bg-ink p-1 text-white shadow" onPointerDown={(event) => event.stopPropagation()}>
@@ -138,4 +156,18 @@ export function TextBox({ element, scale, selected, preview, sampleData, onSelec
       ) : null}
     </div>
   );
+}
+
+function hexToRgba(hex: string, opacity: number) {
+  const value = hex.replace("#", "");
+  if (value.length !== 6) return hex;
+  const red = parseInt(value.slice(0, 2), 16);
+  const green = parseInt(value.slice(2, 4), 16);
+  const blue = parseInt(value.slice(4, 6), 16);
+  return `rgba(${red}, ${green}, ${blue}, ${opacity})`;
+}
+
+function normalizeHref(value: string) {
+  if (/^[a-z][a-z0-9+.-]*:\/\//i.test(value)) return value;
+  return `https://${value}`;
 }

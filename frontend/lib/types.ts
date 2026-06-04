@@ -10,7 +10,11 @@ export type TemplatePage = {
 export type TextElement = {
   id: string;
   page_number: number;
+  element_type: "text" | "image" | "button";
   content: string;
+  image_src?: string | null;
+  image_alt?: string | null;
+  hyperlink_url?: string | null;
   x: number;
   y: number;
   width: number;

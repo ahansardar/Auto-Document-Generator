@@ -1,4 +1,6 @@
+import base64
 import json
+import re
 from pathlib import Path
 from uuid import uuid4
 
@@ -67,10 +69,12 @@ def _align_value(align: str) -> int:
     return {"left": 0, "center": 1, "right": 2, "justify": 3}.get(align, 0)
 
 
-def draw_text_element(page: fitz.Page, element: TemplateTextElement, data: dict[str, str]) -> None:
+def _element_rect(page: fitz.Page, element: TemplateTextElement) -> fitz.Rect:
     pdf_box = browser_to_pdf_coords(element.x, element.y, element.width, element.height, page.rect.height)
-    rect = fitz.Rect(pdf_box.x, pdf_box.y, pdf_box.x + pdf_box.width, pdf_box.y + pdf_box.height)
+    return fitz.Rect(pdf_box.x, pdf_box.y, pdf_box.x + pdf_box.width, pdf_box.y + pdf_box.height)
 
+
+def _draw_background_and_border(page: fitz.Page, rect: fitz.Rect, element: TemplateTextElement) -> None:
     if element.background_color and element.background_opacity > 0:
         page.draw_rect(
             rect,
@@ -86,6 +90,41 @@ def draw_text_element(page: fitz.Page, element: TemplateTextElement, data: dict[
             width=element.border_width,
             overlay=True,
         )
+
+
+def _add_link(page: fitz.Page, rect: fitz.Rect, element: TemplateTextElement, data: dict[str, str]) -> None:
+    uri = replace_variables(element.hyperlink_url or "", data).strip()
+    if not uri:
+        return
+    if not re.match(r"^[a-z][a-z0-9+.-]*://", uri, re.IGNORECASE):
+        uri = f"https://{uri}"
+    page.insert_link({"kind": fitz.LINK_URI, "from": rect, "uri": uri})
+
+
+def _image_bytes(image_src: str | None) -> bytes | None:
+    if not image_src:
+        return None
+    if image_src.startswith("data:") and "," in image_src:
+        image_src = image_src.split(",", 1)[1]
+    try:
+        return base64.b64decode(image_src, validate=False)
+    except Exception:
+        return None
+
+
+def draw_image_element(page: fitz.Page, element: TemplateTextElement, data: dict[str, str]) -> None:
+    rect = _element_rect(page, element)
+    _draw_background_and_border(page, rect, element)
+    content = _image_bytes(element.image_src)
+    if content:
+        page.insert_image(rect, stream=content, keep_proportion=False, overlay=True)
+    _add_link(page, rect, element, data)
+
+
+def draw_text_element(page: fitz.Page, element: TemplateTextElement, data: dict[str, str]) -> None:
+    rect = _element_rect(page, element)
+
+    _draw_background_and_border(page, rect, element)
 
     content = _apply_transform(replace_variables(element.content, data), element.text_transform)
     text_rect = fitz.Rect(
@@ -110,6 +149,7 @@ def draw_text_element(page: fitz.Page, element: TemplateTextElement, data: dict[
                 overlay=True,
             )
             if result >= 0:
+                _add_link(page, rect, element, data)
                 return
             fontsize -= 1
 
@@ -124,6 +164,14 @@ def draw_text_element(page: fitz.Page, element: TemplateTextElement, data: dict[
         fill_opacity=element.text_opacity,
         overlay=True,
     )
+    _add_link(page, rect, element, data)
+
+
+def draw_element(page: fitz.Page, element: TemplateTextElement, data: dict[str, str]) -> None:
+    if element.element_type == "image":
+        draw_image_element(page, element, data)
+        return
+    draw_text_element(page, element, data)
 
 
 def render_pdf_bytes_from_template(session: Session, template_id: str, data: dict, preserve_extra_fields: bool = False) -> tuple[bytes, dict[str, str]]:
@@ -164,7 +212,7 @@ def render_pdf_bytes_from_template(session: Session, template_id: str, data: dic
     for element in elements:
         page_index = element.page_number - 1
         if 0 <= page_index < len(document):
-            draw_text_element(document[page_index], element, generation_data)
+            draw_element(document[page_index], element, generation_data)
 
     pdf_bytes = document.tobytes(garbage=4, deflate=True)
     document.close()

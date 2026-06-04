@@ -11,7 +11,11 @@ class TemplateTextElement(SQLModel, table=True):
     id: str = Field(default_factory=lambda: str(uuid4()), primary_key=True)
     template_id: str = Field(index=True, foreign_key="template.id")
     page_number: int
+    element_type: str = "text"
     content: str
+    image_src: Optional[str] = None
+    image_alt: Optional[str] = None
+    hyperlink_url: Optional[str] = None
     x: float
     y: float
     width: float

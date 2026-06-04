@@ -5,7 +5,11 @@ from pydantic import BaseModel, ConfigDict, Field
 
 class TextElementBase(BaseModel):
     page_number: int = Field(ge=1)
+    element_type: str = "text"
     content: str
+    image_src: Optional[str] = None
+    image_alt: Optional[str] = None
+    hyperlink_url: Optional[str] = None
     x: float = Field(ge=0)
     y: float = Field(ge=0)
     width: float = Field(gt=1)

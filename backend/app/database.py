@@ -32,6 +32,7 @@ def create_db_and_tables() -> None:
     SQLModel.metadata.create_all(engine)
     ensure_variable_columns()
     ensure_template_page_columns()
+    ensure_text_element_columns()
 
 
 def ensure_variable_columns() -> None:
@@ -66,6 +67,30 @@ def ensure_template_page_columns() -> None:
     with engine.begin() as connection:
         connection.execute(text("ALTER TABLE templatepage ADD COLUMN source_page_number INTEGER"))
         connection.execute(text("UPDATE templatepage SET source_page_number = page_number WHERE source_page_number IS NULL"))
+
+
+def ensure_text_element_columns() -> None:
+    inspector = inspect(engine)
+    if "templatetextelement" not in inspector.get_table_names():
+        return
+
+    existing = {column["name"] for column in inspector.get_columns("templatetextelement")}
+    statements: list[str] = []
+    if "element_type" not in existing:
+        statements.append("ALTER TABLE templatetextelement ADD COLUMN element_type VARCHAR NOT NULL DEFAULT 'text'")
+    if "image_src" not in existing:
+        statements.append("ALTER TABLE templatetextelement ADD COLUMN image_src TEXT")
+    if "image_alt" not in existing:
+        statements.append("ALTER TABLE templatetextelement ADD COLUMN image_alt VARCHAR")
+    if "hyperlink_url" not in existing:
+        statements.append("ALTER TABLE templatetextelement ADD COLUMN hyperlink_url TEXT")
+
+    if not statements:
+        return
+
+    with engine.begin() as connection:
+        for statement in statements:
+            connection.execute(text(statement))
 
 
 def get_session() -> Generator[Session, None, None]:

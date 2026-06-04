@@ -16,7 +16,9 @@ def extract_variables_from_elements(elements) -> list[str]:
     names: set[str] = set()
     for element in elements:
         content = element.content if hasattr(element, "content") else element.get("content", "")
+        hyperlink_url = element.hyperlink_url if hasattr(element, "hyperlink_url") else element.get("hyperlink_url", "")
         names.update(extract_variables_from_text(content))
+        names.update(extract_variables_from_text(hyperlink_url))
     return sorted(names)
 
 

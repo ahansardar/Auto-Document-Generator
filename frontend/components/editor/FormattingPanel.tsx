@@ -45,6 +45,9 @@ export function FormattingPanel({ element, linkedVariableName, fontOptions, onCh
   }
 
   const patch = (values: Partial<TextElement>) => onChange({ ...element, ...values });
+  const isImage = element.element_type === "image";
+  const isButton = element.element_type === "button";
+  const isTextLike = element.element_type === "text" || element.element_type === "button";
 
   return (
     <section className="min-w-0 border-t border-line bg-white p-3 sm:p-4 lg:border-l lg:border-t-0">
@@ -61,9 +64,50 @@ export function FormattingPanel({ element, linkedVariableName, fontOptions, onCh
       </div>
       <div className="grid gap-4">
         <div className={panelCard}>
+          <div className="mb-3 text-xs font-semibold uppercase tracking-wide text-zinc-500">Element</div>
+          <div className="grid gap-3">
+            <Field label="Type">
+              <input className={inputClass} value={element.element_type} readOnly />
+            </Field>
+            <Field label="Hyperlink URL">
+              <input
+                className={inputClass}
+                value={element.hyperlink_url ?? ""}
+                onChange={(event) => patch({ hyperlink_url: event.target.value })}
+                placeholder="https://example.com or {{profile_url}}"
+              />
+            </Field>
+            <p className="text-xs text-zinc-500">Links are clickable in generated PDFs. You can also use variables inside URLs.</p>
+          </div>
+        </div>
+
+        {isImage ? (
+          <div className={panelCard}>
+            <div className="mb-3 text-xs font-semibold uppercase tracking-wide text-zinc-500">Image</div>
+            <div className="grid gap-3">
+              {element.image_src ? <img className="max-h-40 rounded border border-line object-contain" src={element.image_src} alt={element.image_alt ?? ""} /> : null}
+              <Field label="Alt text">
+                <input className={inputClass} value={element.image_alt ?? ""} onChange={(event) => patch({ image_alt: event.target.value })} />
+              </Field>
+              <Field label="Opacity"><input type="range" min="0" max="1" step="0.05" value={element.text_opacity} onChange={(event) => patch({ text_opacity: Number(event.target.value) })} /></Field>
+            </div>
+          </div>
+        ) : null}
+
+        {isButton ? (
+          <div className={panelCard}>
+            <div className="mb-3 text-xs font-semibold uppercase tracking-wide text-zinc-500">Button style</div>
+            <div className="grid grid-cols-2 gap-2">
+              <button className="rounded border border-line px-3 py-2 text-sm" onClick={() => patch({ background_color: "#1c1812", background_opacity: 1, text_color: "#ffffff", border_width: 0 })}>Opaque</button>
+              <button className="rounded border border-line px-3 py-2 text-sm" onClick={() => patch({ background_opacity: 0, text_color: "#1c1812", border_width: 1, border_color: "#1c1812" })}>Transparent</button>
+            </div>
+          </div>
+        ) : null}
+
+        {isTextLike ? <div className={panelCard}>
           <div className="mb-3">
-            <div className="text-xs font-semibold uppercase tracking-wide text-zinc-500">1. Linked field</div>
-            <p className="mt-1 text-xs text-zinc-500">Rename this field and the selected text box stays connected automatically.</p>
+            <div className="text-xs font-semibold uppercase tracking-wide text-zinc-500">1. Text and linked field</div>
+            <p className="mt-1 text-xs text-zinc-500">Keep variable name blank for static text, or enter a name to link this text to CSV/generated data.</p>
           </div>
           <div className="grid gap-3">
             <Field label="Variable name">
@@ -84,9 +128,9 @@ export function FormattingPanel({ element, linkedVariableName, fontOptions, onCh
               <textarea className={`${inputClass} min-h-20`} value={element.content} onChange={(event) => patch({ content: event.target.value })} />
             </Field>
           </div>
-        </div>
+        </div> : null}
 
-        <div className={panelCard}>
+        {isTextLike ? <div className={panelCard}>
           <div className="mb-3 text-xs font-semibold uppercase tracking-wide text-zinc-500">2. Typography</div>
           <div className="grid gap-3">
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -109,7 +153,7 @@ export function FormattingPanel({ element, linkedVariableName, fontOptions, onCh
               <button title="Align right" className={`rounded border p-2 ${element.text_align === "right" ? "border-ink bg-zinc-100" : "border-line"}`} onClick={() => patch({ text_align: "right" })}><AlignRight className="h-4 w-4" /></button>
             </div>
           </div>
-        </div>
+        </div> : null}
 
         <div className={`${panelCard} grid gap-3`}>
           <div className="text-xs font-semibold uppercase tracking-wide text-zinc-500">3. Appearance</div>

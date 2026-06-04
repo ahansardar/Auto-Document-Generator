@@ -1,6 +1,7 @@
 "use client";
 
-import { ArrowLeft, Eye, FilePlus2, Minus, Plus, Redo2, Save, Undo2, Wand2 } from "lucide-react";
+import { ArrowLeft, Eye, FilePlus2, Image, Minus, Plus, Redo2, Save, Undo2, Wand2 } from "lucide-react";
+import { useRef } from "react";
 
 type Props = {
   name: string;
@@ -12,6 +13,8 @@ type Props = {
   onNameChange: (name: string) => void;
   onZoomChange: (zoom: number) => void;
   onAddText: () => void;
+  onAddButton: () => void;
+  onAddImage: (file: File | null) => void;
   onSave: () => void;
   onUndo: () => void;
   onRedo: () => void;
@@ -20,7 +23,9 @@ type Props = {
   onGenerate: () => void;
 };
 
-export function TopToolbar({ name, zoom, saving, preview, canUndo, canRedo, onNameChange, onZoomChange, onAddText, onSave, onUndo, onRedo, onBackHome, onPreviewToggle, onGenerate }: Props) {
+export function TopToolbar({ name, zoom, saving, preview, canUndo, canRedo, onNameChange, onZoomChange, onAddText, onAddButton, onAddImage, onSave, onUndo, onRedo, onBackHome, onPreviewToggle, onGenerate }: Props) {
+  const imageInputRef = useRef<HTMLInputElement | null>(null);
+
   return (
     <header className="flex min-h-16 flex-wrap items-center gap-2 border-b border-line bg-white px-3 py-2 sm:gap-3 sm:px-4">
       <button title="Back to home" className="rounded border border-line px-2.5 py-2 text-sm sm:px-3" onClick={onBackHome}>
@@ -43,6 +48,22 @@ export function TopToolbar({ name, zoom, saving, preview, canUndo, canRedo, onNa
       <div className="flex w-full gap-2 overflow-x-auto pb-1 sm:w-auto sm:pb-0">
       <button title="Add text box" className="shrink-0 rounded bg-ink px-3 py-2 text-sm font-medium text-white" onClick={onAddText}>
         <FilePlus2 className="mr-2 inline h-4 w-4" /> Text
+      </button>
+      <button title="Add image" className="shrink-0 rounded border border-line px-3 py-2 text-sm" onClick={() => imageInputRef.current?.click()}>
+        <Image className="mr-2 inline h-4 w-4" /> Image
+      </button>
+      <input
+        ref={imageInputRef}
+        className="hidden"
+        type="file"
+        accept="image/*"
+        onChange={(event) => {
+          onAddImage(event.target.files?.[0] ?? null);
+          event.target.value = "";
+        }}
+      />
+      <button title="Add button" className="shrink-0 rounded border border-line px-3 py-2 text-sm" onClick={onAddButton}>
+        Button
       </button>
       <button title="Undo" className="shrink-0 rounded border border-line px-3 py-2 text-sm disabled:opacity-40" onClick={onUndo} disabled={!canUndo}>
         <Undo2 className="mr-2 inline h-4 w-4" /> Undo
