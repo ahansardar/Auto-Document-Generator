@@ -1,8 +1,10 @@
 /**
- * Google Apps Script web app for certificate mailing.
- * Deploy as: Web app -> Execute as me -> Anyone.
- * Set the deployed Web App URL as APPS_SCRIPT_WEBHOOK_URL on Render.
- * If backend shows HTTP 401, the Web App access is not public enough.
+ * Deploy as a Google Apps Script Web App:
+ * - Execute as: Me
+ * - Who has access: Anyone
+ *
+ * If backend shows HTTP 401, redeploy the Web App with "Anyone" access and
+ * copy the /exec URL into Render's APPS_SCRIPT_WEBHOOK_URL.
  */
 function doGet() {
   return jsonResponse({
@@ -15,6 +17,7 @@ function doGet() {
 function doPost(e) {
   try {
     const payload = JSON.parse(e.postData.contents || '{}');
+
     if (!payload.to || !payload.subject || !payload.attachment || !payload.attachment.base64) {
       return jsonResponse({ ok: false, error: 'Missing required mail payload' }, 400);
     }
@@ -32,7 +35,13 @@ function doPost(e) {
       replyTo: payload.replyTo || undefined
     };
 
-    GmailApp.sendEmail(payload.to, payload.subject, payload.plainBody || 'Your certificate is attached.', options);
+    GmailApp.sendEmail(
+      payload.to,
+      payload.subject,
+      payload.plainBody || 'Your certificate is attached.',
+      options
+    );
+
     return jsonResponse({ ok: true });
   } catch (error) {
     return jsonResponse({ ok: false, error: String(error) }, 500);

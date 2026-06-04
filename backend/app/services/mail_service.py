@@ -105,6 +105,10 @@ def send_certificate_email(template: MailTemplateIn, data: dict[str, str], pdf_b
             if response.status >= 400:
                 raise ValueError(f"Apps Script returned HTTP {response.status}")
     except HTTPError as exc:
+        if exc.code in {401, 403}:
+            raise ValueError(
+                f"Apps Script returned HTTP {exc.code}. Redeploy the Apps Script Web App with Execute as 'Me' and Who has access 'Anyone', then set the /exec URL in Render."
+            ) from exc
         raise ValueError(f"Apps Script returned HTTP {exc.code}") from exc
     except URLError as exc:
         raise ValueError("Could not reach Apps Script webhook") from exc
