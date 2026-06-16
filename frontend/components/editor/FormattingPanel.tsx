@@ -13,6 +13,7 @@ type Props = {
   onDelete: () => void;
   onBringForward: () => void;
   onSendBackward: () => void;
+  onFontUpload: (file: File | null) => void;
 };
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
@@ -27,7 +28,7 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 const inputClass = "min-w-0 w-full rounded border border-line bg-white px-2 py-1.5 text-sm text-ink outline-none focus:border-ink";
 const panelCard = "min-w-0 rounded border border-line bg-white p-3";
 
-export function FormattingPanel({ element, linkedVariableName, fontOptions, onChange, onVariableNameChange, onDelete, onBringForward, onSendBackward }: Props) {
+export function FormattingPanel({ element, linkedVariableName, fontOptions, onChange, onVariableNameChange, onDelete, onBringForward, onSendBackward, onFontUpload }: Props) {
   const [draftVariableName, setDraftVariableName] = useState(linkedVariableName);
 
   useEffect(() => {
@@ -145,6 +146,17 @@ export function FormattingPanel({ element, linkedVariableName, fontOptions, onCh
               </Field>
               <Field label="Font size"><input className={inputClass} type="number" value={element.font_size} onChange={(event) => patch({ font_size: Number(event.target.value) })} /></Field>
             </div>
+            <Field label="Upload custom font">
+              <input
+                className={inputClass}
+                type="file"
+                accept=".ttf,.otf,.ttc,font/ttf,font/otf"
+                onChange={(event) => {
+                  onFontUpload(event.target.files?.[0] ?? null);
+                  event.target.value = "";
+                }}
+              />
+            </Field>
             <div className="flex flex-wrap gap-2">
               <button title="Bold" className={`rounded border p-2 ${element.is_bold ? "border-ink bg-zinc-100" : "border-line"}`} onClick={() => patch({ is_bold: !element.is_bold })}><Bold className="h-4 w-4" /></button>
               <button title="Italic" className={`rounded border p-2 ${element.is_italic ? "border-ink bg-zinc-100" : "border-line"}`} onClick={() => patch({ is_italic: !element.is_italic })}><Italic className="h-4 w-4" /></button>

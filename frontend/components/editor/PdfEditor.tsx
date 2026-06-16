@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Document, pdfjs } from "react-pdf";
-import { getEditorFonts, getTemplate, originalPdfUrl, saveLayout, updatePageLayout } from "@/lib/api";
+import { downloadUrl, getEditorFonts, getTemplate, originalPdfUrl, saveLayout, updatePageLayout, uploadEditorFont } from "@/lib/api";
 import type { EditorFont, TemplateDetail, TemplatePage, TemplateVariable, TextElement } from "@/lib/types";
 import { extractVariablesFromElements, firstVariableName, normalizeVariableName } from "@/lib/variables";
 import { FormattingPanel } from "./FormattingPanel";
@@ -245,6 +245,17 @@ export function PdfEditor({ templateId }: { templateId: string }) {
     () => Object.fromEntries(variables.map((variable) => [variable.name, variable.sample_value || variable.default_value || variable.name])),
     [variables]
   );
+  const customFontCss = useMemo(
+    () =>
+      fontOptions
+        .filter((font) => font.file_url)
+        .map((font) => {
+          const family = String(font.family).replaceAll("\\", "\\\\").replaceAll("\"", "\\\"");
+          return `@font-face{font-family:"${family}";src:url("${downloadUrl(font.file_url || "")}") format("truetype");font-display:swap;}`;
+        })
+        .join("\n"),
+    [fontOptions]
+  );
 
   useEffect(() => {
     if (!page) return;
@@ -450,6 +461,23 @@ export function PdfEditor({ templateId }: { templateId: string }) {
     setVariables(nextVariables);
   }
 
+  async function handleFontUpload(file: File | null) {
+    if (!file) return;
+    setError(null);
+    try {
+      const font = await uploadEditorFont(file);
+      setFontOptions((current) => {
+        const withoutDuplicate = current.filter((item) => item.family.toLowerCase() !== font.family.toLowerCase());
+        return [...withoutDuplicate, font].sort((left, right) => left.family.localeCompare(right.family));
+      });
+      if (selected) {
+        updateElement({ ...selected, font_family: font.family });
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Font upload failed");
+    }
+  }
+
   function deleteElement(id: string) {
     const deleted = elements.find((element) => element.id === id);
     if (!deleted) return;
@@ -464,6 +492,7 @@ export function PdfEditor({ templateId }: { templateId: string }) {
 
   return (
     <div className="flex min-h-dvh flex-col bg-canvas lg:h-screen lg:overflow-hidden">
+      {customFontCss ? <style>{customFontCss}</style> : null}
       <TopToolbar
         name={template.name}
         zoom={zoom}
@@ -514,6 +543,7 @@ export function PdfEditor({ templateId }: { templateId: string }) {
                 onDelete={() => selected && deleteElement(selected.id)}
                 onBringForward={() => selected && updateElement({ ...selected, z_index: selected.z_index + 1 })}
                 onSendBackward={() => selected && updateElement({ ...selected, z_index: Math.max(0, selected.z_index - 1) })}
+                onFontUpload={(file) => void handleFontUpload(file)}
               />
               <VariableManager variables={variables} elementContents={elements} onChange={updateVariables} onRename={renameVariable} />
             </aside>

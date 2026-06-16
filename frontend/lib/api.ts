@@ -96,6 +96,15 @@ export function getEditorFonts() {
   return request<EditorFont[]>("/api/editor/fonts");
 }
 
+export async function uploadEditorFont(file: File, family?: string) {
+  const form = new FormData();
+  form.append("file", file);
+  if (family?.trim()) {
+    form.append("family", family.trim());
+  }
+  return requestWithUploadProgress<EditorFont>("/api/editor/fonts", form);
+}
+
 export async function uploadTemplate(file: File, onProgress?: (progress: UploadProgress) => void) {
   const form = new FormData();
   form.append("file", file);

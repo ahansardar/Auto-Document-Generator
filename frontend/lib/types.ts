@@ -66,8 +66,11 @@ export type TemplateVariable = {
 };
 
 export type EditorFont = {
+  id?: string | null;
   family: string;
   file_path?: string | null;
+  file_url?: string | null;
+  source?: "system" | "custom" | string | null;
 };
 
 export type Template = {
