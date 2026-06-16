@@ -37,6 +37,23 @@ function normalizeVariable(variable: TemplateVariable): TemplateVariable {
   };
 }
 
+function defaultVariableLabel(name: string) {
+  return name.replaceAll("_", " ");
+}
+
+function isConfiguredVariable(variable: TemplateVariable) {
+  return (
+    (variable.label && variable.label !== defaultVariableLabel(variable.name)) ||
+    variable.type !== "text" ||
+    variable.required === false ||
+    Boolean(variable.default_value) ||
+    Boolean(variable.sample_value) ||
+    Boolean(variable.description) ||
+    Boolean(variable.generator_enabled) ||
+    Boolean(variable.generator_pattern)
+  );
+}
+
 function newTextElement(pageNumber: number, zIndex: number, fieldName: string): TextElement {
   return {
     id: crypto.randomUUID(),
@@ -146,8 +163,14 @@ function newImageElement(pageNumber: number, zIndex: number, imageSrc: string, i
 }
 
 function mergeDetectedVariables(variables: TemplateVariable[], elements: TextElement[]) {
-  const existing = new Map(variables.map((variable) => [variable.name, normalizeVariable(variable)]));
-  for (const name of extractVariablesFromElements(elements)) {
+  const detectedNames = new Set(extractVariablesFromElements(elements));
+  const existing = new Map(
+    variables
+      .map(normalizeVariable)
+      .filter((variable) => detectedNames.has(variable.name) || isConfiguredVariable(variable))
+      .map((variable) => [variable.name, variable])
+  );
+  for (const name of detectedNames) {
     if (!existing.has(name)) {
       existing.set(name, newVariable(name));
     }
