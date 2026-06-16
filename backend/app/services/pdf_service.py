@@ -223,6 +223,7 @@ def render_pdf_bytes_from_template(session: Session, template_id: str, data: dic
 def generate_pdf_from_template(session: Session, template_id: str, data: dict) -> GeneratedDocument:
     pdf_bytes, generation_data = render_pdf_bytes_from_template(session, template_id, data)
 
+    storage = StorageService()
     output_path = storage.generated_path(f"{template_id}-{uuid4()}.pdf")
     output_path.write_bytes(pdf_bytes)
     generated_ref = storage.upload_existing_file_ref(output_path, "application/pdf")
