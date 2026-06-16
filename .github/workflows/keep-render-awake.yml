@@ -2,8 +2,20 @@
 
 on:
   schedule:
-    # Stagger away from :00/:05 load spikes; GitHub schedules are UTC and best-effort.
-    - cron: "2,7,12,17,22,27,32,37,42,47,52,57 * * * *"
+    # Split into separate staggered schedules because GitHub often throttles dense comma crons.
+    # Times are UTC and still best-effort.
+    - cron: "2 * * * *"
+    - cron: "7 * * * *"
+    - cron: "12 * * * *"
+    - cron: "17 * * * *"
+    - cron: "22 * * * *"
+    - cron: "27 * * * *"
+    - cron: "32 * * * *"
+    - cron: "37 * * * *"
+    - cron: "42 * * * *"
+    - cron: "47 * * * *"
+    - cron: "52 * * * *"
+    - cron: "57 * * * *"
   workflow_dispatch:
 
 jobs:
@@ -14,4 +26,5 @@ jobs:
       - name: Ping backend health endpoint
         run: |
           curl --fail --silent --show-error --max-time 30 --retry 2 --retry-delay 5 \
+            --header "Cache-Control: no-cache" \
             https://auto-document-generator-backend.onrender.com/api/health
