@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { CheckSquare, Mail, Square } from "lucide-react";
 import { emailBatch } from "@/lib/api";
+import { FileDropZone } from "@/components/ui/FileDropZone";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import type { BatchMailResult, MailTemplate, TemplateVariable } from "@/lib/types";
 
@@ -249,7 +250,15 @@ export function EmailBatchForm({ templateId, variables }: { templateId: string; 
 
       <div className="grid gap-5">
         <Field label="Recipient CSV">
-          <input className="rounded border border-line px-3 py-2" type="file" accept=".csv,text/csv" onChange={(event) => void handleFileChange(event.target.files?.[0] ?? null)} />
+          <FileDropZone
+            accept=".csv,text/csv"
+            title="Upload mailing CSV"
+            description="Drop a CSV with certificate fields plus one email column."
+            file={file}
+            compact
+            disabled={busy}
+            onFile={(nextFile) => void handleFileChange(nextFile)}
+          />
         </Field>
         <div className="rounded border border-line bg-canvas p-3 text-xs text-zinc-600">
           Include certificate variables like <span className="font-medium text-ink">{manualColumns.join(", ") || "your template fields"}</span> plus one email column such as <span className="font-medium text-ink">email</span>. The email column is only used for sending and is not printed on the certificate unless you add it as a template variable.

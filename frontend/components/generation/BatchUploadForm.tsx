@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { CheckSquare, Square } from "lucide-react";
 import { downloadUrl, generateBatch } from "@/lib/api";
+import { FileDropZone } from "@/components/ui/FileDropZone";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import type { BatchResult, TemplateVariable } from "@/lib/types";
 
@@ -192,7 +193,15 @@ export function BatchUploadForm({ templateId, variables }: { templateId: string;
           ) : null}
         </div>
 
-        <input className="rounded border border-line px-3 py-2" type="file" accept=".csv,text/csv" onChange={(event) => void handleFileChange(event.target.files?.[0] ?? null)} />
+        <FileDropZone
+          accept=".csv,text/csv"
+          title="Upload recipient CSV"
+          description="Drop your CSV here, then choose exactly who should receive certificates."
+          file={file}
+          compact
+          disabled={busy}
+          onFile={(nextFile) => void handleFileChange(nextFile)}
+        />
 
         {preview ? (
           <div className="rounded border border-line">

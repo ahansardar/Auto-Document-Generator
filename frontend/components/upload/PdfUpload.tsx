@@ -2,12 +2,13 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { UploadCloud } from "lucide-react";
 import { uploadTemplate } from "@/lib/api";
+import { FileDropZone } from "@/components/ui/FileDropZone";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 
 export function PdfUpload() {
   const router = useRouter();
+  const [file, setFile] = useState<File | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [progress, setProgress] = useState(0);
@@ -15,6 +16,7 @@ export function PdfUpload() {
 
   async function handleFile(file: File | null) {
     if (!file) return;
+    setFile(file);
     setBusy(true);
     setError(null);
     setProgress(4);
@@ -36,23 +38,21 @@ export function PdfUpload() {
   }
 
   return (
-    <label className="flex min-h-64 cursor-pointer flex-col items-center justify-center rounded border border-dashed border-line bg-white p-10 text-center transition hover:border-ink">
-      <UploadCloud className="mb-4 h-10 w-10" aria-hidden />
-      <span className="text-lg font-semibold">{busy ? "Uploading PDF..." : "Upload Canva PDF"}</span>
-      <span className="mt-2 max-w-md text-sm text-zinc-600">The original PDF remains untouched. Text boxes are saved as reusable overlay metadata.</span>
+    <div className="grid gap-3">
+      <FileDropZone
+        accept="application/pdf,.pdf"
+        title={busy ? "Uploading PDF..." : "Upload Canva PDF"}
+        description="Drop a PDF here. The original stays untouched; text boxes are saved as reusable overlay metadata."
+        file={file}
+        disabled={busy}
+        onFile={(nextFile) => void handleFile(nextFile)}
+      />
       {busy ? (
-        <div className="mt-5 w-full max-w-md">
+        <div>
           <ProgressBar value={progress} label={progressLabel} detail="Keep this tab open while the template is prepared." />
         </div>
       ) : null}
-      <input
-        className="sr-only"
-        type="file"
-        accept="application/pdf,.pdf"
-        disabled={busy}
-        onChange={(event) => void handleFile(event.target.files?.[0] ?? null)}
-      />
       {error ? <span className="mt-4 text-sm text-red-600">{error}</span> : null}
-    </label>
+    </div>
   );
 }
