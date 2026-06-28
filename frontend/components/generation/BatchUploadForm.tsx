@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { CheckSquare, Square } from "lucide-react";
-import { downloadUrl, generateBatch } from "@/lib/api";
+import { generateBatch } from "@/lib/api";
 import { FileDropZone } from "@/components/ui/FileDropZone";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import type { BatchResult, TemplateVariable } from "@/lib/types";
@@ -258,7 +258,7 @@ export function BatchUploadForm({ templateId, variables }: { templateId: string;
         {error ? <div className="text-sm text-red-600">{error}</div> : null}
         {result ? (
           <div className="grid gap-2 text-sm">
-            <a className="font-medium underline" href={downloadUrl(result.zip_download_url)}>Download ZIP</a>
+            <a className="font-medium underline" href={result.zip_download_url} download={`${templateId}-batch.zip`}>Download ZIP</a>
             <span>{result.generated_document_ids.length} PDFs generated</span>
             {result.errors.length ? <pre className="max-h-48 overflow-auto rounded bg-zinc-100 p-3">{JSON.stringify(result.errors, null, 2)}</pre> : null}
           </div>

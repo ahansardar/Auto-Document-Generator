@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { downloadUrl, generateOne } from "@/lib/api";
+import { generateOne } from "@/lib/api";
 import { generateFromPattern } from "@/lib/patterns";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import type { TemplateVariable } from "@/lib/types";
@@ -29,7 +29,7 @@ export function DynamicVariableForm({ templateId, variables }: { templateId: str
       window.clearInterval(timer);
       setProgress(100);
       setProgressLabel("PDF generated.");
-      setDownload(downloadUrl(result.download_url));
+      setDownload(result.download_url);
     } catch (err) {
       window.clearInterval(timer);
       setError(err instanceof Error ? err.message : "Generation failed");

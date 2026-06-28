@@ -77,7 +77,7 @@ export function originalPdfUrl(templateId: string) {
 }
 
 export function downloadUrl(path: string) {
-  return `${API_BASE}${path}`;
+  return /^(blob:|https?:)/.test(path) ? path : `${API_BASE}${path}`;
 }
 
 export function listTemplates() {
@@ -127,18 +127,48 @@ export function updatePageLayout(id: string, sourcePageNumbers: number[]) {
   });
 }
 
-export function generateOne(id: string, data: Record<string, string>) {
-  return request<{ generated_document_id: string; download_url: string }>(`/api/templates/${id}/generate`, {
+export async function generateOne(id: string, data: Record<string, string>) {
+  const response = await fetch(`${API_BASE}/api/templates/${id}/generate`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ data })
   });
+  if (!response.ok) {
+    const payload = await response.json().catch(() => ({ detail: response.statusText }));
+    throw new Error(payload.detail || "Generation failed");
+  }
+  return { download_url: URL.createObjectURL(await response.blob()) };
 }
 
 export async function generateBatch(id: string, file: File, onProgress?: (progress: UploadProgress) => void) {
   const form = new FormData();
   form.append("file", file);
-  return requestWithUploadProgress<BatchResult>(`/api/templates/${id}/generate-batch`, form, onProgress);
+  return new Promise<BatchResult>((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", `${API_BASE}/api/templates/${id}/generate-batch`);
+    xhr.responseType = "blob";
+    xhr.upload.onprogress = (event) => {
+      if (event.lengthComputable) {
+        onProgress?.({ loaded: event.loaded, total: event.total, percent: Math.round((event.loaded / event.total) * 100) });
+      }
+    };
+    xhr.onerror = () => reject(new Error("Network request failed"));
+    xhr.onload = async () => {
+      if (xhr.status < 200 || xhr.status >= 300) {
+        const payload = await xhr.response.text().then(JSON.parse).catch(() => ({}));
+        reject(new Error(payload.detail || xhr.statusText || "Batch generation failed"));
+        return;
+      }
+      const generatedCount = Number(xhr.getResponseHeader("X-Generated-Count") || 0);
+      const errorCount = Number(xhr.getResponseHeader("X-Generation-Error-Count") || 0);
+      resolve({
+        zip_download_url: URL.createObjectURL(xhr.response),
+        generated_document_ids: Array.from({ length: generatedCount }, (_, index) => String(index + 1)),
+        errors: Array.from({ length: errorCount }, (_, index) => ({ row: index + 1, errors: ["See generation-errors.json in the ZIP."] }))
+      });
+    };
+    xhr.send(form);
+  });
 }
 
 export async function emailBatch(id: string, file: File, mailTemplate: MailTemplate, onProgress?: (progress: UploadProgress) => void) {

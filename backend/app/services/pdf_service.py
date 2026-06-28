@@ -1,14 +1,11 @@
 import base64
-import json
 import re
 from pathlib import Path
-from uuid import uuid4
 
 import fitz
 from fastapi import HTTPException
 from sqlmodel import Session, select
 
-from app.models.generated_document import GeneratedDocument
 from app.models.template import Template, TemplatePage
 from app.models.text_element import TemplateTextElement
 from app.models.variable import TemplateVariable
@@ -218,26 +215,3 @@ def render_pdf_bytes_from_template(session: Session, template_id: str, data: dic
     document.close()
 
     return pdf_bytes, generation_data
-
-
-def generate_pdf_from_template(session: Session, template_id: str, data: dict) -> GeneratedDocument:
-    pdf_bytes, generation_data = render_pdf_bytes_from_template(session, template_id, data)
-
-    storage = StorageService()
-    output_path = storage.generated_path(f"{template_id}-{uuid4()}.pdf")
-    output_path.write_bytes(pdf_bytes)
-    generated_ref = storage.upload_existing_file_ref(output_path, "application/pdf")
-
-    generated = GeneratedDocument(
-        template_id=template_id,
-        data_json=json.dumps(generation_data),
-        generated_pdf_path=generated_ref,
-    )
-    session.add(generated)
-    session.commit()
-    session.refresh(generated)
-    return generated
-
-
-def generate_batch_from_template(session: Session, template_id: str, rows: list[dict]) -> list[GeneratedDocument]:
-    return [generate_pdf_from_template(session, template_id, row) for row in rows]

@@ -1,35 +1,37 @@
 import json
-from pathlib import Path
-from uuid import uuid4
+import io
+import zipfile
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
-from fastapi.responses import FileResponse
+from fastapi.responses import StreamingResponse
 from sqlmodel import Session, select
 
 from app.database import get_session
-from app.models.generated_document import GeneratedDocument
 from app.models.variable import TemplateVariable
-from app.schemas.generation import BatchGenerateResponse, BatchMailResponse, GenerateRequest, GenerateResponse, MailTemplateIn
+from app.schemas.generation import BatchMailResponse, GenerateRequest, MailTemplateIn
 from app.services.mail_service import send_certificate_email
-from app.services.pdf_service import generate_batch_from_template, generate_pdf_from_template, render_pdf_bytes_from_template
-from app.services.storage_service import StorageService
+from app.services.pdf_service import render_pdf_bytes_from_template
 from app.services.validation_service import validate_batch_rows, validate_batch_upload_schema
 from app.utils.csv_utils import parse_csv_to_rows, parse_json_to_rows
 
 router = APIRouter(tags=["generation"])
 
 
-@router.post("/api/templates/{template_id}/generate", response_model=GenerateResponse)
-def generate_one(template_id: str, payload: GenerateRequest, session: Session = Depends(get_session)) -> GenerateResponse:
-    generated = generate_pdf_from_template(session, template_id, payload.data)
-    return GenerateResponse(
-        generated_document_id=generated.id,
-        download_url=f"/api/generated/{generated.id}/download",
+@router.post("/api/templates/{template_id}/generate")
+def generate_one(template_id: str, payload: GenerateRequest, session: Session = Depends(get_session)) -> StreamingResponse:
+    pdf_bytes, _ = render_pdf_bytes_from_template(session, template_id, payload.data)
+    return StreamingResponse(
+        io.BytesIO(pdf_bytes),
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f'attachment; filename="{template_id}.pdf"',
+            "Cache-Control": "no-store",
+        },
     )
 
 
-@router.post("/api/templates/{template_id}/generate-batch", response_model=BatchGenerateResponse)
-async def generate_batch(template_id: str, file: UploadFile = File(...), session: Session = Depends(get_session)) -> BatchGenerateResponse:
+@router.post("/api/templates/{template_id}/generate-batch")
+async def generate_batch(template_id: str, file: UploadFile = File(...), session: Session = Depends(get_session)) -> StreamingResponse:
     content = await file.read()
     filename = (file.filename or "").lower()
     try:
@@ -40,16 +42,29 @@ async def generate_batch(template_id: str, file: UploadFile = File(...), session
     variables = list(session.exec(select(TemplateVariable).where(TemplateVariable.template_id == template_id)).all())
     validate_batch_upload_schema(variables, rows)
     valid_rows, errors = validate_batch_rows(variables, rows)
-    generated = generate_batch_from_template(session, template_id, valid_rows)
-    zip_path = StorageService().create_zip_from_generated_refs(
-        [document.generated_pdf_path for document in generated],
-        f"{template_id}-batch-{uuid4()}.zip",
-    )
+    archive_buffer = io.BytesIO()
+    generated_count = 0
+    with zipfile.ZipFile(archive_buffer, mode="w", compression=zipfile.ZIP_DEFLATED) as archive:
+        for index, row in enumerate(valid_rows, start=1):
+            try:
+                pdf_bytes, _ = render_pdf_bytes_from_template(session, template_id, row)
+                archive.writestr(f"certificate-{index:04d}.pdf", pdf_bytes)
+                generated_count += 1
+            except Exception as exc:
+                errors.append({"row": index, "errors": [str(exc)]})
+        if errors:
+            archive.writestr("generation-errors.json", json.dumps(errors, indent=2))
+    archive_buffer.seek(0)
 
-    return BatchGenerateResponse(
-        zip_download_url=f"/api/generated/download-file/{zip_path.name}",
-        generated_document_ids=[document.id for document in generated],
-        errors=errors,
+    return StreamingResponse(
+        archive_buffer,
+        media_type="application/zip",
+        headers={
+            "Content-Disposition": f'attachment; filename="{template_id}-batch.zip"',
+            "Cache-Control": "no-store",
+            "X-Generated-Count": str(generated_count),
+            "X-Generation-Error-Count": str(len(errors)),
+        },
     )
 
 
@@ -98,25 +113,17 @@ async def email_batch(
     return BatchMailResponse(attempted=len(valid_rows), sent=sent, errors=errors)
 
 
-@router.get("/api/generated", response_model=list[GeneratedDocument])
-def list_generated(session: Session = Depends(get_session)) -> list[GeneratedDocument]:
-    return list(session.exec(select(GeneratedDocument).order_by(GeneratedDocument.created_at.desc())).all())
+@router.get("/api/generated")
+def list_generated() -> list:
+    """Generated PDFs are intentionally ephemeral and are never catalogued here."""
+    return []
 
 
 @router.get("/api/generated/{document_id}/download")
-def download_generated(document_id: str, session: Session = Depends(get_session)) -> FileResponse:
-    document = session.get(GeneratedDocument, document_id)
-    if not document:
-        raise HTTPException(status_code=404, detail="Generated PDF not found")
-    path = StorageService().ensure_local_file(document.generated_pdf_path)
-    if not path:
-        raise HTTPException(status_code=404, detail="Generated PDF not found")
-    return FileResponse(path, media_type="application/pdf", filename=f"{document_id}.pdf")
+def download_generated(document_id: str) -> None:
+    raise HTTPException(status_code=410, detail="Generated PDFs are not stored. Generate this document again.")
 
 
 @router.get("/api/generated/download-file/{filename}")
-def download_generated_file(filename: str) -> FileResponse:
-    path = StorageService().generated_path(filename)
-    if not StorageService().ensure_local_file(path):
-        raise HTTPException(status_code=404, detail="Generated file not found")
-    return FileResponse(path, media_type="application/zip", filename=filename)
+def download_generated_file(filename: str) -> None:
+    raise HTTPException(status_code=410, detail="Generated archives are not stored. Generate this batch again.")

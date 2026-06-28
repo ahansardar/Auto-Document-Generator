@@ -54,7 +54,9 @@ If the backend runs somewhere else, set `NEXT_PUBLIC_API_BASE`.
 - In Render, set `DATABASE_URL` to the Supabase Postgres connection string.
 - In Render, set `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, and `SUPABASE_BUCKET=templates` so PDFs survive deploys.
 - To email certificates, deploy `docs/apps-script-certificate-mailer.gs` as a Google Apps Script Web App and set Render env `APPS_SCRIPT_WEBHOOK_URL` to that Web App URL.
-- Email-batch certificates are rendered in memory and sent to Apps Script immediately; they are not saved as generated files in backend storage.
+- Single certificates, batch ZIPs, and email-batch certificates are rendered in memory. Generated PDFs and ZIPs are never saved to the backend database, Render filesystem, or Supabase Storage.
+- `POST /api/templates/{template_id}/generate` streams a PDF response and `POST /api/templates/{template_id}/generate-batch` streams a ZIP response. Clients should download those responses immediately.
+- On startup, the backend purges legacy generated-document rows and their old PDF objects. Template PDFs remain persisted because they are source assets, not generated output.
 - Render's free filesystem is ephemeral, so production persistence is handled through Supabase Postgres and Supabase Storage instead of Render disks.
 
 ## API Endpoints
